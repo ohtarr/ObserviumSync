@@ -1,0 +1,32 @@
+{
+    "name": "ohtarr/ObserviumSync",
+    "type": "library"
+],
+    "description": "PHP Utility Library",
+    "keywords": [
+        "php5",
+        "Observium",
+	"sync"
+        ],
+    "homepage": "https://github.com/ohtarr/ObserviumSync",
+    "license": "LGPL3.0",
+    "authors": [
+        {
+            "name": "Ohtarr",
+            "email": "ohtarr@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+		"php": ">=5.3.3",
+		"nategood/httpful": "^0.2.20",
+    },
+    "require-dev": {
+    },
+    "autoload": {
+        "psr-4": {
+            "ohtarr\\": "lib"
+        }
+    }
+}
