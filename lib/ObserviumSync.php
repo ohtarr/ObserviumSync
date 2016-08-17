@@ -30,7 +30,11 @@ namespace ohtarr;
 
 class ObserviumSync
 {
-	public $NM_DEVICES;		//array of switches from Network Management Platform
+
+	//public $NM_DEVICES = json_decode();
+	public $NM_DEVICES;
+	public $OBS_DEVICES;
+	public $OBS_GROUPS;
 	public $SNOW_LOCS;			//array of locations from SNOW
 	public $logmsg = "";
 
@@ -39,14 +43,18 @@ class ObserviumSync
 		global $DB;
 		$this->NM_DEVICES = $this->Netman_get_devices();		//populate array of switches from Network Management Platform
 		$this->SNOW_LOCS = $this->Snow_get_valid_locations();	//populate a list of locations from SNOW
-
+		$this->OBS_DEVICES = $this->obs_get_devices();	//populate a list of Observium devices
+		$this->OBS_GROUPS = $this->obs_get_groups();
+/*
 		if (empty($this->NM_DEVICES)		||
-			empty($this->SNOW_LOCS)
+			empty($this->SNOW_LOCS)			||
+			empty($this->OBS_DEVICES)
 			)
 		{
 			$DB->log("ObserviumSync failed: 1 or more data sources are empty!");
-			exit();
+			die();
 		}
+/**/
 	}
 
 	public function __destruct()
@@ -75,7 +83,8 @@ class ObserviumSync
 					];
 	/**/
 
-	public function automation_report($params)
+/*
+ 	public function automation_report($params)
 	{
 		if(!$params){
 			$params = [];
@@ -102,7 +111,8 @@ class ObserviumSync
 								->send()										//execute the request
 								->body;											//only give us the body back
 		return $response;
-	}
+	} 
+*/
 
 	/*
     [WCDBCVAN] => Array
@@ -131,29 +141,21 @@ class ObserviumSync
 			$snowlocs[$loc[name]] = $loc;								//build new array with sitecode as the key
 		}
 		ksort($snowlocs);												//sort by key
+
+/*
+		$fp = fopen('/opt/ohtarr/SNOWDATA.json', 'w');
+		fwrite($fp, json_encode($snowlocs));
+		fclose($fp);
+/**/
+
 		return $snowlocs;												//return new array
+		//$str = file_get_contents('/opt/ohtarr/SNOWDATA.json');
+		//return json_decode($str, true);
 	}
 
-	/*
-	returns array of active switches from Network Management Platform
-
-    [wscganorswd01] => Array
-        (
-            [id] => 39716
-            [name] => xxxxxxxxswd01
-            [ip] => 10.5.5.1
-            [snmploc] => Array
-                (
-                    [site] => xxxxxxxx
-                    [erl] => xxxxxxxx
-                    [desc] => xxxxxxxx
-                )
-
-        )
-	/**/
 	public function Netman_get_devices(){
-
-		$CERTFILE   = "/opt/networkautomation/netman.pem";
+/*
+		$CERTFILE   = "/opt/networkautomation/archive/netman.ldapint.pem";
 		$CERTPASS   = "";
 
 		$OPTIONS = [
@@ -174,47 +176,419 @@ class ObserviumSync
 			//CURLOPT_VERBOSE       => true,
 				];
 
-
-
-
-
-
 		$postparams = [	"category"	=>	"Management",
 		];
 
-		$URL = 'https:/'.'/netman/information/api/search/';
+		$URL = BASEURL . 'information/api/search/';
 
 		$request = \Httpful\Request::post($URL);
 		foreach( $OPTIONS as $key => $val) {
 				$request->addOnCurlOption($key, $val);
 		}
-		$DEVICEIDS = $request	->body(json_encode($postparams))				//parameters to send in body
+		$DEVICEIDS = $request->body(json_encode($postparams))				//parameters to send in body
 							->send()										//execute the request
 							->body;											//only give us the body back
 		
 		$DEVICEIDS = get_object_vars($DEVICEIDS);
+		//sort($DEVICEIDS);
 
 		$DEVICEIDS = $DEVICEIDS[results];
 
 		foreach($DEVICEIDS as $deviceid){
-			$URL = 'https:/'.'/netman/information/api/retrieve/?id=' . $deviceid;
+			$URL = BASEURL . 'information/api/retrieve/?id=' . $deviceid;
  
 			$request = \Httpful\Request::get($URL);
 			foreach( $OPTIONS as $key => $val) {
 					$request->addOnCurlOption($key, $val);
 			}
-//			$request->expectsJson()										//we expect JSON back from the api
 			$response = $request-> send();
 			//\metaclassing\Utility::dumper($response->body);
-			$newarray[$deviceid] = \metaclassing\Utility::objectToArray($response->body->object);
-			
+			$device = \metaclassing\Utility::objectToArray($response->body->object);
+
+			$newarray[$device['data']['id']]['name'] = 	$device['data']['name'];
+			$newarray[$device['data']['id']]['id'] = 		$device['data']['id'];
+			$newarray[$device['data']['id']]['ip'] = 		$device['data']['ip'];
+			$newarray[$device['data']['id']]['model'] = 	$device['data']['model'];
+			//print_r($newarray);
+			//exit;
 		}
+		ksort($newarray);
 		return $newarray;
+/**/
+/*
+		$fp = fopen('/opt/ohtarr/NMDATA.json', 'w');
+		fwrite($fp, json_encode($newarray));
+		fclose($fp);
+/**/
 
+		$str = file_get_contents('/opt/ohtarr/NMDATA.json');
+		return json_decode($str, true);
+/**/
 	}
 
-	public function Obs_groups_to_add(){
+	public function obs_get_devices(){
+
+		$OPTIONS = [
+			CURLOPT_RETURNTRANSFER  => true,
+			CURLOPT_FOLLOWLOCATION  => true,
+			CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
+				];
+
+		$URL = 'http://10.202.29.88/obsapi/?type=device';
+
+		$request = \Httpful\Request::get($URL);
+		foreach( $OPTIONS as $key => $val) {
+				$request->addOnCurlOption($key, $val);
+		}
+		$response = $request->send();										//execute the request
+
+		$devices = \metaclassing\Utility::objectToArray($response->body->data);
+
+		return $devices;
+/**/
+/*
+		$fp = fopen('/opt/ohtarr/OBSDATA.json', 'w');
+		fwrite($fp, json_encode($devices));
+		fclose($fp);
+/**/
+/*
+		$str = file_get_contents('/opt/ohtarr/OBSDATA.json');
+		return json_decode($str, true);
+/**/
+	}
+
+	public function obs_get_groups(){
+
+		$OPTIONS = [
+			CURLOPT_RETURNTRANSFER  => true,
+			CURLOPT_FOLLOWLOCATION  => true,
+			CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
+				];
+
+		$URL = 'http://10.202.29.88/obsapi/?type=group';
+
+		$request = \Httpful\Request::get($URL);
+		foreach( $OPTIONS as $key => $val) {
+				$request->addOnCurlOption($key, $val);
+		}
+		$response = $request->send();										//execute the request
+
+		$groups = \metaclassing\Utility::objectToArray($response->body->data);
+
+		return $groups;
+	}
+
+	public function obs_devices_to_add(){
+		//build array of netman devices
+		$newnmarray = array();
+		foreach($this->NM_DEVICES as $nmid => $nmdevice){
+			if (!empty($nmdevice['name'])){
+				$newnmarray[] = strtolower($nmdevice['name']);
+			}
+		}
+		sort($newnmarray);
+
+		//build array of observium devices
+		$newobsarray = array();
+		foreach($this->OBS_DEVICES as $obsid => $obsdevice){
+			
+
+			$newobsarray[] = rtrim($obsdevice['hostname'],".net.kiewitplaza.com");
+		} 
+		sort($newobsarray);
+
+/*
+		foreach($newobsarray as $key => $value){
+			if (empty($value)) {
+				unset($newobsarray[$key]);
+			}
+		}
+
+
+		$newobsarray = array_values($newobsarray);
+/**/
+
+		return array_values(array_diff($newnmarray, $newobsarray));
+	}
+
+	public function obs_devices_to_remove(){
+
+		$newnmarray = array();
+		foreach($this->NM_DEVICES as $nmid => $nmdevice){
+			$newnmarray[] = strtolower($nmdevice['name']);
+		}
+		sort($newnmarray);
+
+
+		//build array of observium devices
+		$newobsarray = array();
+		foreach($this->OBS_DEVICES as $obsid => $obsdevice){
+			
+			$newobsarray[] = rtrim($obsdevice['hostname'],".net.kiewitplaza.com");
+		} 
+		sort($newobsarray);
+
+		return array_values(array_diff($newobsarray, $newnmarray));
+	}
+
+	public function obs_add_device($hostname){
+
+
+
+		$URL = 'http://10.202.29.88/obsapi/';
+
+		$postparams = [	"action"	=>	"add_device",
+						"hostname"	=>	$hostname];
+
+		$OPTIONS = [
+		CURLOPT_RETURNTRANSFER  => true,
+		CURLOPT_FOLLOWLOCATION  => true,
+		CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
+			];
+
+		$request = \Httpful\Request::post($URL);
+
+		foreach( $OPTIONS as $key => $val) {
+				$request->addOnCurlOption($key, $val);
+		}
 		
-	
+		$DEVICE = $request->body(json_encode($postparams))				//parameters to send in body
+							->send()										//execute the request
+							->body;											//only give us the body back
+		
+		//$DEVICE = get_object_vars($DEVICE);
+		$DEVICE = \metaclassing\Utility::objectToArray($DEVICE);
+
+		//\metaclassing\Utility::dumper($DEVICE);
+		//If device is an ACCESS SWITCH, disable PORTS module.
+
+		if($DEVICE['success'] == true){
+			$reg = "/^\D{5}\S{3}.*(sw[api]|SW[API])[0-9]{2,4}.*$/";                   //regex to match ACCESS switches only
+			if (preg_match($reg,$hostname, $hits)){
+				$postparams2 = [	"action"	=>	"modify_device",
+									"id"		=>	$DEVICE['data']['device_id'],
+									"option"	=>	"disable_port_discovery",
+									//"debug"		=>	1,
+				];
+				$request2 = \Httpful\Request::post($URL);
+				$response2 = $request2->body(json_encode($postparams2))
+								->send()
+								->body;
+
+				$response2 = \metaclassing\Utility::objectToArray($response2);
+
+				$postparams3 = [	"action"	=>	"modify_device",
+									"id"		=>	$DEVICE['data']['device_id'],
+									"option"	=>	"disable_port_polling",
+				];
+
+				$request3 = \Httpful\Request::post($URL);
+				$response3 = $request3->body(json_encode($postparams3))
+								->send()
+								->body;
+
+				$response3 = \metaclassing\Utility::objectToArray($response3);
+
+				//\metaclassing\Utility::dumper($response2);
+				//\metaclassing\Utility::dumper($response3);
+
+
+			}
+		} 
+		return $DEVICE;
 	}
+
+	public function obs_add_devices(){
+		
+		$adddevices = $this->obs_devices_to_add();
+		//print_r($adddevices);
+
+		foreach ($adddevices as $adddevice){
+			$hostname = $adddevice;
+			print $hostname . "\n";
+			print "\n";	
+			\metaclassing\Utility::dumper($this->obs_add_device($hostname));
+			print "\n";	
+			//return $this->obs_add_device($hostname);
+			//break;
+		}
+	}
+
+	public function obs_remove_device($params){
+
+		$URL = 'http://10.202.29.88/obsapi/';
+
+		$postparams['action'] = "delete_device";
+		if ($params['id']){
+			$postparams['id'] = $params['id'];
+		} elseif ($params['hostname']){
+			$postparams['hostname'] = $params['hostname'];
+		} else {
+			return 'Missing parameter "id" or "hostname" !!!';
+		}
+
+		$OPTIONS = [
+		CURLOPT_RETURNTRANSFER  => true,
+		CURLOPT_FOLLOWLOCATION  => true,
+		CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
+			];
+
+		$request = \Httpful\Request::post($URL);
+
+		foreach( $OPTIONS as $key => $val) {
+				$request->addOnCurlOption($key, $val);
+		}
+		
+		$RESPONSE = $request->body(json_encode($postparams))				//parameters to send in body
+							->send()										//execute the request
+							->body;											//only give us the body back
+
+		$RESPONSE = \metaclassing\Utility::objectToArray($RESPONSE);
+	
+		return $RESPONSE;
+	}
+
+	public function obs_remove_all_devices(){
+		foreach($this->OBS_DEVICES as $id => $device){
+			print $device['hostname'] . "\n";
+			$result = $this->obs_remove_device(array("id"=>$id));
+			print $result['success'] . "\n";
+		}
+	}
+	
+	public function obs_remove_devices(){
+		$deldevices = $this->obs_devices_to_remove();
+		foreach($deldevices as $hostname){
+			$result = $this->obs_remove_device(array("hostname"=>$hostname));
+		}
+	}
+
+	public function obs_site_groups_to_add(){	
+		$snowsites = $this->SNOW_LOCS;
+		
+		foreach($snowsites as $sitename => $site){
+			$snowsitenames[] = $sitename;
+		}
+		sort($snowsitenames);
+		//print_r($snowsitenames);
+
+		$obsgroups = $this->OBS_GROUPS;
+
+		$regex = "/SITE_/";
+		foreach($obsgroups as $groupid => $group){
+			if(preg_match($regex, $group['group_name'], $hits)){
+				$obsgroupnames[] = ltrim($group['group_name'], "SITE_");
+			}
+		}
+		sort($obsgroupnames);
+		//print_r($obsgroupnames);
+		
+		return array_values(array_diff($snowsitenames, $obsgroupnames));
+
+	}
+
+	public function obs_site_groups_to_remove(){
+
+		$snowsites = $this->SNOW_LOCS;
+		
+		foreach($snowsites as $sitename => $site){
+			$snowsitenames[] = $sitename;
+		}
+		sort($snowsitenames);
+		//print_r($snowsitenames);
+
+		$obsgroups = $this->OBS_GROUPS;
+
+		$regex = "/SITE_/";
+		foreach($obsgroups as $groupid => $group){
+			if(preg_match($regex, $group['group_name'], $hits)){
+				$obsgroupnames[] = ltrim($group['group_name'], "SITE_");
+			}
+		}
+		sort($obsgroupnames);
+		//print_r($obsgroupnames);
+
+		return array_values(array_diff($obsgroupnames, $snowsitenames));
+	}
+
+	public function obs_add_site_group($sitename){
+		
+		$URL = 'http://10.202.29.88/obsapi/';
+
+		$postparams = [	"action"				=>	"add_group",
+						"group_type"			=>	"device",
+						"name"					=>	"SITE_".$sitename,
+						"description"			=>	"Default site group for " . $sitename,
+						"device_association"	=>	"hostname match " . $sitename . "*",
+						"entity_association"	=>	"*",
+						];
+
+		$OPTIONS = [
+		CURLOPT_RETURNTRANSFER  => true,
+		CURLOPT_FOLLOWLOCATION  => true,
+		CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
+			];
+
+		$request = \Httpful\Request::post($URL);
+
+		foreach( $OPTIONS as $key => $val) {
+				$request->addOnCurlOption($key, $val);
+		}
+		
+		$response = $request->body(json_encode($postparams))				//parameters to send in body
+							->send()										//execute the request
+							->body;											//only give us the body back
+		
+		//$DEVICE = get_object_vars($DEVICE);
+		$status = \metaclassing\Utility::objectToArray($response);
+		return $status;
+	}
+
+	public function obs_add_site_groups(){
+		$addsites = $this->obs_site_groups_to_add();
+
+		foreach ($addsites as $site){
+			$this->obs_add_site_group($site);
+		}
+	}
+
+	public function obs_remove_site_group($sitename){
+
+		$URL = 'http://10.202.29.88/obsapi/';
+
+		$postparams = [	"action"				=>	"delete_group",
+						"name"					=>	"SITE_".$sitename,
+						];
+
+		$OPTIONS = [
+		CURLOPT_RETURNTRANSFER  => true,
+		CURLOPT_FOLLOWLOCATION  => true,
+		CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
+			];
+
+		$request = \Httpful\Request::post($URL);
+
+		foreach( $OPTIONS as $key => $val) {
+				$request->addOnCurlOption($key, $val);
+		}
+		
+		$response = $request->body(json_encode($postparams))				//parameters to send in body
+							->send()										//execute the request
+							->body;											//only give us the body back
+		
+		//$DEVICE = get_object_vars($DEVICE);
+		$status = \metaclassing\Utility::objectToArray($response);
+		return $status;
+	}
+
+	public function obs_remove_site_groups(){
+
+		$delsites = $this->obs_site_groups_to_remove();
+
+		foreach ($delsites as $site){
+			$this->obs_remove_site_group($site);
+		}
+
+	}
+/**/
 }
