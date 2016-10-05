@@ -1,7 +1,6 @@
 {
     "name": "ohtarr/ObserviumSync",
-    "type": "library"
-],
+    "type": "library",
     "description": "PHP Utility Library",
     "keywords": [
         "php5",
@@ -18,9 +17,18 @@
         }
     ],
     "minimum-stability": "dev",
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/ohtarr/utility.git"
+        }
+    ],
     "require": {
-		"php": ">=5.3.3",
-		"nategood/httpful": "^0.2.20",
+	"php": ">=5.3.3",
+        "nategood/httpful": "^0.2.20",
+        "ohtarr/utility": "dev-master",
+        "metaclassing/utility": "dev-master",
+	"vlucas/phpdotenv": "dev-master"
     },
     "require-dev": {
     },

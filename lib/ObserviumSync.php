@@ -36,12 +36,13 @@ class ObserviumSync
 	public $OBS_DEVICES;
 	public $OBS_GROUPS;
 	public $SNOW_LOCS;			//array of locations from SNOW
+	public $OBSBASEURL = "https://netmon.kiewitplaza.com/api/";
 	public $logmsg = "";
 
     public function __construct()
 	{
 		global $DB;
-		$this->NM_DEVICES = $this->Netman_get_devices();		//populate array of switches from Network Management Platform
+		$this->NM_DEVICES = $this->Netman_get_cisco_devices();		//populate array of switches from Network Management Platform
 		$this->SNOW_LOCS = $this->Snow_get_valid_locations();	//populate a list of locations from SNOW
 		$this->OBS_DEVICES = $this->obs_get_devices();	//populate a list of Observium devices
 		$this->OBS_GROUPS = $this->obs_get_groups();
@@ -59,10 +60,12 @@ class ObserviumSync
 
 	public function __destruct()
 	{
+/*
 		global $DB;
 		if ($this->logmsg){
-			$DB->log($this->logmsg);		
+			$DB->log($this->logmsg);
 		}
+/**/
 	}
 
 	/*
@@ -99,7 +102,7 @@ class ObserviumSync
 						"target_hostname"	=>	"E911_EGW",											//optional
 						"triggeredby"		=>	"netman",											//optional
 						"description"		=>	"Netman E911_EGWSYNC function completed",			//optional
-						"target_ip"			=>	"10.123.123.70",									//optional
+						"target_ip"			=>	"10.123.123.91",									//optional
 						"notes"				=>	"A generic E911_EGW function as been completed",	//optional
 		];
 		$newparams = array_merge($baseparams, $params);
@@ -111,14 +114,14 @@ class ObserviumSync
 								->send()										//execute the request
 								->body;											//only give us the body back
 		return $response;
-	} 
+	}
 */
 
 	/*
     [WCDBCVAN] => Array
         (
             [zip] => V5C 0G5
-            [u_street_2] => 
+            [u_street_2] =>
             [street] => 123 Fast Creek Drive
             [name] => XXXXXXXX
             [state] => BC
@@ -153,8 +156,8 @@ class ObserviumSync
 		//return json_decode($str, true);
 	}
 
-	public function Netman_get_devices(){
-/*
+	public function Netman_get_cisco_devices(){
+
 		$CERTFILE   = "/opt/networkautomation/archive/netman.ldapint.pem";
 		$CERTPASS   = "";
 
@@ -177,6 +180,7 @@ class ObserviumSync
 				];
 
 		$postparams = [	"category"	=>	"Management",
+				"type"		=>	"Device_Network_Cisco"
 		];
 
 		$URL = BASEURL . 'information/api/search/';
@@ -188,7 +192,7 @@ class ObserviumSync
 		$DEVICEIDS = $request->body(json_encode($postparams))				//parameters to send in body
 							->send()										//execute the request
 							->body;											//only give us the body back
-		
+
 		$DEVICEIDS = get_object_vars($DEVICEIDS);
 		//sort($DEVICEIDS);
 
@@ -196,7 +200,7 @@ class ObserviumSync
 
 		foreach($DEVICEIDS as $deviceid){
 			$URL = BASEURL . 'information/api/retrieve/?id=' . $deviceid;
- 
+
 			$request = \Httpful\Request::get($URL);
 			foreach( $OPTIONS as $key => $val) {
 					$request->addOnCurlOption($key, $val);
@@ -220,7 +224,7 @@ class ObserviumSync
 		fwrite($fp, json_encode($newarray));
 		fclose($fp);
 /**/
-
+/*
 		$str = file_get_contents('/opt/ohtarr/NMDATA.json');
 		return json_decode($str, true);
 /**/
@@ -234,7 +238,7 @@ class ObserviumSync
 			CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
 				];
 
-		$URL = 'http://10.202.29.88/obsapi/?type=device';
+		$URL = $this->OBSBASEURL . '?type=device';
 
 		$request = \Httpful\Request::get($URL);
 		foreach( $OPTIONS as $key => $val) {
@@ -265,7 +269,7 @@ class ObserviumSync
 			CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
 				];
 
-		$URL = 'http://10.202.29.88/obsapi/?type=group';
+		$URL = $this->OBSBASEURL . '?type=group';
 
 		$request = \Httpful\Request::get($URL);
 		foreach( $OPTIONS as $key => $val) {
@@ -287,16 +291,17 @@ class ObserviumSync
 			}
 		}
 		sort($newnmarray);
+		//print_r($newnmarray);
 
 		//build array of observium devices
 		$newobsarray = array();
 		foreach($this->OBS_DEVICES as $obsid => $obsdevice){
-			
 
-			$newobsarray[] = rtrim($obsdevice['hostname'],".net.kiewitplaza.com");
-		} 
+
+			$newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
+		}
 		sort($newobsarray);
-
+		//print_r($newobsarray);
 /*
 		foreach($newobsarray as $key => $value){
 			if (empty($value)) {
@@ -307,7 +312,6 @@ class ObserviumSync
 
 		$newobsarray = array_values($newobsarray);
 /**/
-
 		return array_values(array_diff($newnmarray, $newobsarray));
 	}
 
@@ -318,24 +322,24 @@ class ObserviumSync
 			$newnmarray[] = strtolower($nmdevice['name']);
 		}
 		sort($newnmarray);
-
+		//print_r($newnmarray);
 
 		//build array of observium devices
 		$newobsarray = array();
 		foreach($this->OBS_DEVICES as $obsid => $obsdevice){
-			
-			$newobsarray[] = rtrim($obsdevice['hostname'],".net.kiewitplaza.com");
-		} 
+
+//			$newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
+			$newobsarray[] = $obsdevice['hostname'];
+		}
 		sort($newobsarray);
+		//print_r($newobsarray);
 
 		return array_values(array_diff($newobsarray, $newnmarray));
 	}
 
 	public function obs_add_device($hostname){
 
-
-
-		$URL = 'http://10.202.29.88/obsapi/';
+		$URL = $this->OBSBASEURL;
 
 		$postparams = [	"action"	=>	"add_device",
 						"hostname"	=>	$hostname];
@@ -351,11 +355,11 @@ class ObserviumSync
 		foreach( $OPTIONS as $key => $val) {
 				$request->addOnCurlOption($key, $val);
 		}
-		
+
 		$DEVICE = $request->body(json_encode($postparams))				//parameters to send in body
 							->send()										//execute the request
 							->body;											//only give us the body back
-		
+
 		//$DEVICE = get_object_vars($DEVICE);
 		$DEVICE = \metaclassing\Utility::objectToArray($DEVICE);
 
@@ -394,29 +398,37 @@ class ObserviumSync
 
 
 			}
-		} 
+		}
 		return $DEVICE;
 	}
 
 	public function obs_add_devices(){
-		
+                $this->logmsg .= "***ADD_DEVICES*** ";
+		$counter = 0;
 		$adddevices = $this->obs_devices_to_add();
 		//print_r($adddevices);
 
+//		while($counter < 75){
+//                        \metaclassing\Utility::dumper($this->obs_add_device($adddevices[$counter]));
+//			$counter++;
+//		}
+
+
 		foreach ($adddevices as $adddevice){
-			$hostname = $adddevice;
-			print $hostname . "\n";
-			print "\n";	
-			\metaclassing\Utility::dumper($this->obs_add_device($hostname));
-			print "\n";	
-			//return $this->obs_add_device($hostname);
+			//print $adddevice . "\n";
+			//print "\n";
+			$this->logmsg .= $adddevice . ", ";
+			\metaclassing\Utility::dumper($this->obs_add_device($adddevice));
+			//print "\n";
+			//return $this->obs_add_device($adddevice);
 			//break;
 		}
+
 	}
 
 	public function obs_remove_device($params){
 
-		$URL = 'http://10.202.29.88/obsapi/';
+		$URL = $this->OBSBASEURL;
 
 		$postparams['action'] = "delete_device";
 		if ($params['id']){
@@ -448,17 +460,11 @@ class ObserviumSync
 		return $RESPONSE;
 	}
 
-	public function obs_remove_all_devices(){
-		foreach($this->OBS_DEVICES as $id => $device){
-			print $device['hostname'] . "\n";
-			$result = $this->obs_remove_device(array("id"=>$id));
-			print $result['success'] . "\n";
-		}
-	}
-	
 	public function obs_remove_devices(){
+                $this->logmsg .= "***REMOVE_DEVICES*** ";
 		$deldevices = $this->obs_devices_to_remove();
 		foreach($deldevices as $hostname){
+			$this->logmsg .= $hostname . ", ";
 			$result = $this->obs_remove_device(array("hostname"=>$hostname));
 		}
 	}
@@ -475,16 +481,16 @@ class ObserviumSync
 		$obsgroups = $this->OBS_GROUPS;
 
 		$regex = "/SITE_/";
+		$obsgroupnames = array();
 		foreach($obsgroups as $groupid => $group){
 			if(preg_match($regex, $group['group_name'], $hits)){
-				$obsgroupnames[] = ltrim($group['group_name'], "SITE_");
+				$obsgroupnames[] = substr($group['group_name'], 5);
 			}
 		}
 		sort($obsgroupnames);
 		//print_r($obsgroupnames);
 		
 		return array_values(array_diff($snowsitenames, $obsgroupnames));
-
 	}
 
 	public function obs_site_groups_to_remove(){
@@ -492,17 +498,18 @@ class ObserviumSync
 		$snowsites = $this->SNOW_LOCS;
 		
 		foreach($snowsites as $sitename => $site){
-			$snowsitenames[] = $sitename;
+			$snowsitenames[] = "SITE_" . $sitename;
 		}
 		sort($snowsitenames);
 		//print_r($snowsitenames);
 
 		$obsgroups = $this->OBS_GROUPS;
 
+		$obsgroupnames = array();
 		$regex = "/SITE_/";
 		foreach($obsgroups as $groupid => $group){
 			if(preg_match($regex, $group['group_name'], $hits)){
-				$obsgroupnames[] = ltrim($group['group_name'], "SITE_");
+				$obsgroupnames[] = $group['group_name'];
 			}
 		}
 		sort($obsgroupnames);
@@ -512,8 +519,7 @@ class ObserviumSync
 	}
 
 	public function obs_add_site_group($sitename){
-		
-		$URL = 'http://10.202.29.88/obsapi/';
+		$URL = $this->OBSBASEURL;
 
 		$postparams = [	"action"				=>	"add_group",
 						"group_type"			=>	"device",
@@ -545,19 +551,20 @@ class ObserviumSync
 	}
 
 	public function obs_add_site_groups(){
+                $this->logmsg .= "***ADD_SITE-GROUPS*** ";
 		$addsites = $this->obs_site_groups_to_add();
 
 		foreach ($addsites as $site){
+			$this->logmsg .= $site . ", ";
 			$this->obs_add_site_group($site);
 		}
 	}
 
 	public function obs_remove_site_group($sitename){
-
-		$URL = 'http://10.202.29.88/obsapi/';
+		$URL = $this->OBSBASEURL;
 
 		$postparams = [	"action"				=>	"delete_group",
-						"name"					=>	"SITE_".$sitename,
+						"name"					=>	$sitename,
 						];
 
 		$OPTIONS = [
@@ -582,11 +589,50 @@ class ObserviumSync
 	}
 
 	public function obs_remove_site_groups(){
-
+                $this->logmsg .= "***REMOVE_SITE-GROUPS*** ";
 		$delsites = $this->obs_site_groups_to_remove();
 
-		foreach ($delsites as $site){
-			$this->obs_remove_site_group($site);
+		foreach ($delsites as $sitename){
+			$this->logmsg .= $sitename . ", ";
+			$this->obs_remove_site_group($sitename);
+		}
+
+	}
+
+	public function obs_remove_all_site_groups(){
+		foreach($this->OBS_GROUPS as $group){
+			$this->obs_remove_site_group($group['group_name']);
+		}
+	}
+
+	public function obs_remove_all_devices(){
+		foreach($this->OBS_DEVICES as $id => $device){
+			print $device['hostname'] . "\n";
+			$result = $this->obs_remove_device(array("id"=>$id));
+			print $result['success'] . "\n";
+		}
+	}
+
+	public function obs_remove_dup_devices(){
+		$devices = $this->OBS_DEVICES;
+		//return array_diff_key( $devices , array_unique( $devices ) );
+		//return array_count_values($devices);
+		//return count($devices) !== count(array_unique($devices));
+
+        foreach($this->OBS_DEVICES as $obsid => $obsdevice){
+            $newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
+        }
+        sort($newobsarray);
+		/*
+		print "Obs Devices : \n";
+        print_r($newobsarray);
+		print "Obs Duplicates : \n:";
+		print_r(array_values(array_diff_key($newobsarray , array_unique($newobsarray))));
+		/**/
+		$dups = array_values(array_diff_key($newobsarray , array_unique($newobsarray)));
+
+		foreach($dups as $dup){
+			$result = $this->obs_remove_device(array("hostname"=>$dup));
 		}
 
 	}
