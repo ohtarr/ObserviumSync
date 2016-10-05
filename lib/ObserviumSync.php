@@ -206,8 +206,8 @@ class ObserviumSync
 					$request->addOnCurlOption($key, $val);
 			}
 			$response = $request-> send();
-			//\metaclassing\Utility::dumper($response->body);
-			$device = \metaclassing\Utility::objectToArray($response->body->object);
+			//\Metaclassing\Utility::dumper($response->body);
+			$device = \Metaclassing\Utility::objectToArray($response->body->object);
 
 			$newarray[$device['data']['id']]['name'] = 	$device['data']['name'];
 			$newarray[$device['data']['id']]['id'] = 		$device['data']['id'];
@@ -246,7 +246,7 @@ class ObserviumSync
 		}
 		$response = $request->send();										//execute the request
 
-		$devices = \metaclassing\Utility::objectToArray($response->body->data);
+		$devices = \Metaclassing\Utility::objectToArray($response->body->data);
 
 		return $devices;
 /**/
@@ -277,7 +277,7 @@ class ObserviumSync
 		}
 		$response = $request->send();										//execute the request
 
-		$groups = \metaclassing\Utility::objectToArray($response->body->data);
+		$groups = \Metaclassing\Utility::objectToArray($response->body->data);
 
 		return $groups;
 	}
@@ -361,9 +361,9 @@ class ObserviumSync
 							->body;											//only give us the body back
 
 		//$DEVICE = get_object_vars($DEVICE);
-		$DEVICE = \metaclassing\Utility::objectToArray($DEVICE);
+		$DEVICE = \Metaclassing\Utility::objectToArray($DEVICE);
 
-		//\metaclassing\Utility::dumper($DEVICE);
+		//\Metaclassing\Utility::dumper($DEVICE);
 		//If device is an ACCESS SWITCH, disable PORTS module.
 
 		if($DEVICE['success'] == true){
@@ -379,7 +379,7 @@ class ObserviumSync
 								->send()
 								->body;
 
-				$response2 = \metaclassing\Utility::objectToArray($response2);
+				$response2 = \Metaclassing\Utility::objectToArray($response2);
 
 				$postparams3 = [	"action"	=>	"modify_device",
 									"id"		=>	$DEVICE['data']['device_id'],
@@ -391,10 +391,10 @@ class ObserviumSync
 								->send()
 								->body;
 
-				$response3 = \metaclassing\Utility::objectToArray($response3);
+				$response3 = \Metaclassing\Utility::objectToArray($response3);
 
-				//\metaclassing\Utility::dumper($response2);
-				//\metaclassing\Utility::dumper($response3);
+				//\Metaclassing\Utility::dumper($response2);
+				//\Metaclassing\Utility::dumper($response3);
 
 
 			}
@@ -409,7 +409,7 @@ class ObserviumSync
 		//print_r($adddevices);
 
 //		while($counter < 75){
-//                        \metaclassing\Utility::dumper($this->obs_add_device($adddevices[$counter]));
+//                        \Metaclassing\Utility::dumper($this->obs_add_device($adddevices[$counter]));
 //			$counter++;
 //		}
 
@@ -418,7 +418,7 @@ class ObserviumSync
 			//print $adddevice . "\n";
 			//print "\n";
 			$this->logmsg .= $adddevice . ", ";
-			\metaclassing\Utility::dumper($this->obs_add_device($adddevice));
+			\Metaclassing\Utility::dumper($this->obs_add_device($adddevice));
 			//print "\n";
 			//return $this->obs_add_device($adddevice);
 			//break;
@@ -455,7 +455,7 @@ class ObserviumSync
 							->send()										//execute the request
 							->body;											//only give us the body back
 
-		$RESPONSE = \metaclassing\Utility::objectToArray($RESPONSE);
+		$RESPONSE = \Metaclassing\Utility::objectToArray($RESPONSE);
 	
 		return $RESPONSE;
 	}
@@ -546,7 +546,7 @@ class ObserviumSync
 							->body;											//only give us the body back
 		
 		//$DEVICE = get_object_vars($DEVICE);
-		$status = \metaclassing\Utility::objectToArray($response);
+		$status = \Metaclassing\Utility::objectToArray($response);
 		return $status;
 	}
 
@@ -584,7 +584,7 @@ class ObserviumSync
 							->body;											//only give us the body back
 		
 		//$DEVICE = get_object_vars($DEVICE);
-		$status = \metaclassing\Utility::objectToArray($response);
+		$status = \Metaclassing\Utility::objectToArray($response);
 		return $status;
 	}
 
