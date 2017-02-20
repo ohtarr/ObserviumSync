@@ -187,25 +187,20 @@ class ObserviumSync
 		$newnmarray = array();
 		foreach($this->NM_DEVICES as $nmid => $nmdevice){
 			if (!empty($nmdevice['name'])){
-				$newnmarray[] = strtolower($nmdevice['name']);
+				$newnmarray[] = str_replace('/', '-', strtolower($nmdevice['name']));
 			}
 		}
 		sort($newnmarray);
-		//print "NEW NM ARRAY:\n";
-		//print_r($newnmarray);
 
 		//build array of observium devices
 		$newobsarray = array();
 		foreach($this->OBS_DEVICES as $obsid => $obsdevice){
-			$hostname = str_replace('/', '-', $obsdevice['hostname']);
+			$newobsarray[] = str_replace('/', '-', $obsdevice['hostname']);
 
-			$newobsarray[] = $hostname;
 			//$newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
 		}
 		sort($newobsarray);
 
-		//print "NEW OBS ARRAY:\n";
-		//print_r($newobsarray);
 /*
 		foreach($newobsarray as $key => $value){
 			if (empty($value)) {
@@ -218,17 +213,15 @@ class ObserviumSync
 /**/
 
 		$newarray = array_values(array_diff($newnmarray, $newobsarray));
-		foreach ($newarray as $hostname){
-			$finalarray[] = str_replace('/', '-', $hostname);
-		}
-		return $finalarray;
+
+		return $newarray;
 	}
 
 	public function obs_devices_to_remove(){
 
 		$newnmarray = array();
 		foreach($this->NM_DEVICES as $nmid => $nmdevice){
-			$newnmarray[] = strtolower($nmdevice['name']);
+			$newnmarray[] = str_replace('/', '-', strtolower($nmdevice['name']));
 		}
 		sort($newnmarray);
 		//print_r($newnmarray);
@@ -238,16 +231,14 @@ class ObserviumSync
 		foreach($this->OBS_DEVICES as $obsid => $obsdevice){
 
 //			$newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
-			$newobsarray[] = $obsdevice['hostname'];
+			$newobsarray[] = str_replace('/', '-', $obsdevice['hostname']);
 		}
 		sort($newobsarray);
 		//print_r($newobsarray);
 
 		$newarray = array_values(array_diff($newobsarray, $newnmarray));
-		foreach ($newarray as $hostname){
-			$finalarray[] = str_replace('/', '-', $hostname);
-		}
-		return $finalarray;
+
+		return $newarray;
 	}
 
 	public function obs_add_device($hostname){
