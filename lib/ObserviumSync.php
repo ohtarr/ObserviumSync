@@ -28,6 +28,10 @@
  */
 namespace ohtarr;
 
+use GuzzleHttp\Client as GuzzleHttpClient;
+use GuzzleHttp\Cookie\FileCookieJar as FileCookieJar;
+use Dotenv\Dotenv as Dotenv;
+
 class ObserviumSync
 {
 
@@ -36,12 +40,31 @@ class ObserviumSync
 	public $OBS_DEVICES;
 	public $OBS_GROUPS;
 	public $SNOW_LOCS;			//array of locations from SNOW
-	public $OBSBASEURL = "https://netmon.kiewitplaza.com/api/";
 	public $logmsg = "";
+	public $NetmonClient;
+	public $NetmanCookieJar;		
+	public $NetmanClient;
+	public $SnowClient;
 
     public function __construct()
 	{
+		$dotenv = new Dotenv(__DIR__."/../");
+		$dotenv->load();
 		global $DB;
+		$this->NetmonClient = new GuzzleHttpClient([
+			'base_uri' => getenv('OBSERVIUM_BASE_URI'),
+		]);
+		
+		$this->NetmanCookieJar = new FileCookieJar('ObserviumSyncCookieJar', true);		
+		$this->NetmanClient = new GuzzleHttpClient([
+			'base_uri' => getenv('NETMAN_BASE_URI'),
+			'cookies' => $this->NetmanCookieJar,
+			'cert' => getenv('NETMAN_CERT'),
+		]);
+		
+		$this->SnowClient = new GuzzleHttpClient([
+			'base_uri' => getenv('SNOW_BASE_URI'),
+		]);		
 		$this->NM_DEVICES = $this->Netman_get_cisco_devices();		//populate array of switches from Network Management Platform
 		$this->SNOW_LOCS = $this->Snow_get_valid_locations();	//populate a list of locations from SNOW
 		$this->OBS_DEVICES = $this->obs_get_devices();	//populate a list of Observium devices
@@ -60,62 +83,8 @@ class ObserviumSync
 
 	public function __destruct()
 	{
-/*
-		global $DB;
-		if ($this->logmsg){
-			$DB->log($this->logmsg);
-		}
-/**/
-	}
 
-	/*
-	Hit a reporting API to log all automation tasks.
-	$params format:
-							[	"origin_hostname"	=>	"test",
-								"processname"		=>	"tester",
-								"category"			=>	"Network",
-								"timesaved"			=>	"2",
-								"datestarted"		=>	"2016-05-26 09:34:00.000",
-								"datefinished"		=>	"2016-05-26 09:35:00.000",
-								"success"			=>	"1",
-					//			"target_hostname"	=>	"1",	//optional
-					//			"triggeredby"		=>	test,	//optional
-					//			"description"		=>	test,	//optional
-					//			"target_ip"			=>	test,	//optional
-					//			"notes"				=>	test,	//optional
-					];
-	/**/
-
-/*
- 	public function automation_report($params)
-	{
-		if(!$params){
-			$params = [];
-		}
-		$baseparams = [	"origin_hostname"	=>	"netman",
-						"processname"		=>	"E911_EGWSYNC",
-						"category"			=>	"Network",
-						"timesaved"			=>	"5",
-						"datestarted"		=>	date('Y/m/d H:i:s'),
-						"datefinished"		=>	date('Y/m/d H:i:s'),
-						"success"			=>	"1",
-						"target_hostname"	=>	"E911_EGW",											//optional
-						"triggeredby"		=>	"netman",											//optional
-						"description"		=>	"Netman E911_EGWSYNC function completed",			//optional
-						"target_ip"			=>	"10.123.123.91",									//optional
-						"notes"				=>	"A generic E911_EGW function as been completed",	//optional
-		];
-		$newparams = array_merge($baseparams, $params);
-		$URI = API_REPORTING_URL;											//api to hit e911 raw DB
-		$response = \Httpful\Request::post($URI)								//Build a GET request...
-								->authenticateWith(LDAP_USER, LDAP_PASS)		//basic authentication
-								->body($newparams)									//parameters to send in body
-								->sendsType(\Httpful\Mime::FORM)				//we are sending basic forms
-								->send()										//execute the request
-								->body;											//only give us the body back
-		return $response;
 	}
-*/
 
 	/*
     [WCDBCVAN] => Array
@@ -132,154 +101,85 @@ class ObserviumSync
 	/**/
 	public function Snow_get_valid_locations(){
 
-		$SNOW = new \ohtarr\ServiceNowRestClient;		//new snow rest api instance
+		$apiRequest = $this->SnowClient->request('GET', getenv('SNOW_API_URI'), [
+			'query' => [
+				'u_active' => "true", 
+				'sysparm_fields' => "sys_id,name,street,u_street_2,city,state,zip,country"
+			],
+			'auth' => [
+				getenv('SNOW_USERNAME'), 
+				getenv('SNOW_PASSWORD')
+			],
+		]);
+		$response = json_decode($apiRequest->getBody()->getContents(), true);
 
-		$PARAMS = array(								//parameters needed for SNOW API call
-							"u_active"                	=>	"true",
-							"sysparm_fields"        	=>	"sys_id,name,street,u_street_2,city,state,zip,country",
-		);
-
-		$RESPONSE = $SNOW->SnowTableApiGet("cmn_location", $PARAMS);	//get all locations from snow api
-		foreach($RESPONSE as $loc){										//loop through all locations returned from snow
+		foreach($response['result'] as $loc){							//loop through all locations returned from snow
 			$snowlocs[$loc[name]] = $loc;								//build new array with sitecode as the key
 		}
 		ksort($snowlocs);												//sort by key
 
-/*
-		$fp = fopen('/opt/ohtarr/SNOWDATA.json', 'w');
-		fwrite($fp, json_encode($snowlocs));
-		fclose($fp);
-/**/
-
 		return $snowlocs;												//return new array
-		//$str = file_get_contents('/opt/ohtarr/SNOWDATA.json');
-		//return json_decode($str, true);
 	}
 
 	public function Netman_get_cisco_devices(){
 
-		$CERTFILE   = "/opt/networkautomation/archive/netman.ldapint.pem";
-		$CERTPASS   = "";
-
-		$OPTIONS = [
-			//Generic client stuff
-			CURLOPT_COOKIEJAR       => '/opt/networkautomation/cookiejar',
-			CURLOPT_RETURNTRANSFER  => true,
-			CURLOPT_FOLLOWLOCATION  => true,
-			CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
-			//CA / Server certs
-			CURLOPT_SSL_VERIFYPEER  => true,        // Validate the server cert is valid & signed by a trusted CA
-			CURLOPT_SSL_VERIFYHOST  => 1,           // Only trust directly-issued certs, no intermediates
-			//User certs
-			CURLOPT_SSLCERTTYPE     => "PEM",       // Our user cert and key file format is base64 encoded PEM
-			CURLOPT_SSLCERT         => $CERTFILE,   // Our user cert filename
-			//CURLOPT_SSLCERTPASSWD => $CERTPASS,   // And private key password
-			//Debugging
-			//CURLOPT_CERTINFO      => true,
-			//CURLOPT_VERBOSE       => true,
-				];
-
-		$postparams = [	"category"	=>	"Management",
-				"type"		=>	"Device_Network_Cisco"
+		$postparams = [
+				"category"  =>  "Management",
+				"type"      =>  "Device_Network_Cisco"
 		];
 
-		$URL = BASEURL . 'information/api/search/';
-
-		$request = \Httpful\Request::post($URL);
-		foreach( $OPTIONS as $key => $val) {
-				$request->addOnCurlOption($key, $val);
-		}
-		$DEVICEIDS = $request->body(json_encode($postparams))				//parameters to send in body
-							->send()										//execute the request
-							->body;											//only give us the body back
-
-		$DEVICEIDS = get_object_vars($DEVICEIDS);
-		//sort($DEVICEIDS);
-
-		$DEVICEIDS = $DEVICEIDS[results];
-
+		$apiRequest = $this->NetmanClient->request('POST', getenv('NETMAN_SEARCH_API_URI'), [
+				'json' => $postparams,
+		]);
+		$DEVICEIDS = json_decode($apiRequest->getBody()->getContents(), true);
+		$DEVICEIDS = $DEVICEIDS['results'];
+		
 		foreach($DEVICEIDS as $deviceid){
-			$URL = BASEURL . 'information/api/retrieve/?id=' . $deviceid;
 
-			$request = \Httpful\Request::get($URL);
-			foreach( $OPTIONS as $key => $val) {
-					$request->addOnCurlOption($key, $val);
-			}
-			$response = $request-> send();
-			//\Metaclassing\Utility::dumper($response->body);
-			$device = \Metaclassing\Utility::objectToArray($response->body->object);
+			$apiRequest = $this->NetmanClient->request('GET', getenv('NETMAN_RETRIEVE_API_URI'), [
+				'query' => ['id' => $deviceid],
+			]);
+			$device = json_decode($apiRequest->getBody()->getContents(), true);
 
-			$newarray[$device['data']['id']]['name'] = 	$device['data']['name'];
-			$newarray[$device['data']['id']]['id'] = 		$device['data']['id'];
-			$newarray[$device['data']['id']]['ip'] = 		$device['data']['ip'];
-			$newarray[$device['data']['id']]['model'] = 	$device['data']['model'];
-			//print_r($newarray);
-			//exit;
+			$newarray[$device['object']['data']['id']]['name'] = 	$device['object']['data']['name'];
+			$newarray[$device['object']['data']['id']]['id'] = 		$device['object']['data']['id'];
+			$newarray[$device['object']['data']['id']]['ip'] = 		$device['object']['data']['ip'];
+			$newarray[$device['object']['data']['id']]['model'] = 	$device['object']['data']['model'];
 		}
 		ksort($newarray);
 		return $newarray;
-/**/
-/*
-		$fp = fopen('/opt/ohtarr/NMDATA.json', 'w');
-		fwrite($fp, json_encode($newarray));
-		fclose($fp);
-/**/
-/*
-		$str = file_get_contents('/opt/ohtarr/NMDATA.json');
-		return json_decode($str, true);
-/**/
+
 	}
 
 	public function obs_get_devices(){
 
-		$OPTIONS = [
-			CURLOPT_RETURNTRANSFER  => true,
-			CURLOPT_FOLLOWLOCATION  => true,
-			CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
-				];
+		
+		$apiRequest = $this->NetmonClient->request('GET', 'api/', [
+			'query' => ['type' => 'device'],
+			'auth' => [
+				getenv('OBS_USERNAME'), 
+				getenv('OBS_PASSWORD')
+			],
+		]);
 
-		$URL = $this->OBSBASEURL . '?type=device';
+		$devices = json_decode($apiRequest->getBody()->getContents(), true);
 
-		$request = \Httpful\Request::get($URL);
-		foreach( $OPTIONS as $key => $val) {
-				$request->addOnCurlOption($key, $val);
-		}
-		$response = $request->send();										//execute the request
+		return $devices['data'];
 
-		$devices = \Metaclassing\Utility::objectToArray($response->body->data);
-
-		return $devices;
-/**/
-/*
-		$fp = fopen('/opt/ohtarr/OBSDATA.json', 'w');
-		fwrite($fp, json_encode($devices));
-		fclose($fp);
-/**/
-/*
-		$str = file_get_contents('/opt/ohtarr/OBSDATA.json');
-		return json_decode($str, true);
-/**/
 	}
 
 	public function obs_get_groups(){
+		$apiRequest = $this->NetmonClient->request('GET', 'api/', [
+			'query' => ['type' => 'group'],
+			'auth' => [
+				getenv('OBS_USERNAME'), 
+				getenv('OBS_PASSWORD')
+			],
+		]);
 
-		$OPTIONS = [
-			CURLOPT_RETURNTRANSFER  => true,
-			CURLOPT_FOLLOWLOCATION  => true,
-			CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
-				];
+		$groups = json_decode($apiRequest->getBody()->getContents(), true);
 
-		$URL = $this->OBSBASEURL . '?type=group';
-
-		$request = \Httpful\Request::get($URL);
-		foreach( $OPTIONS as $key => $val) {
-				$request->addOnCurlOption($key, $val);
-		}
-		$response = $request->send();										//execute the request
-
-		$groups = \Metaclassing\Utility::objectToArray($response->body->data);
-
-		return $groups;
+		return $groups['data'];
 	}
 
 	public function obs_devices_to_add(){
@@ -291,16 +191,20 @@ class ObserviumSync
 			}
 		}
 		sort($newnmarray);
+		//print "NEW NM ARRAY:\n";
 		//print_r($newnmarray);
 
 		//build array of observium devices
 		$newobsarray = array();
 		foreach($this->OBS_DEVICES as $obsid => $obsdevice){
+			$hostname = str_replace('/', '-', $obsdevice['hostname']);
 
-
-			$newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
+			$newobsarray[] = $hostname;
+			//$newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
 		}
 		sort($newobsarray);
+
+		//print "NEW OBS ARRAY:\n";
 		//print_r($newobsarray);
 /*
 		foreach($newobsarray as $key => $value){
@@ -312,7 +216,12 @@ class ObserviumSync
 
 		$newobsarray = array_values($newobsarray);
 /**/
-		return array_values(array_diff($newnmarray, $newobsarray));
+
+		$newarray = array_values(array_diff($newnmarray, $newobsarray));
+		foreach ($newarray as $hostname){
+			$finalarray[] = str_replace('/', '-', $hostname);
+		}
+		return $finalarray;
 	}
 
 	public function obs_devices_to_remove(){
@@ -334,68 +243,61 @@ class ObserviumSync
 		sort($newobsarray);
 		//print_r($newobsarray);
 
-		return array_values(array_diff($newobsarray, $newnmarray));
+		$newarray = array_values(array_diff($newobsarray, $newnmarray));
+		foreach ($newarray as $hostname){
+			$finalarray[] = str_replace('/', '-', $hostname);
+		}
+		return $finalarray;
 	}
 
 	public function obs_add_device($hostname){
-
-		$URL = $this->OBSBASEURL;
+		$hostname = str_replace('/', '-', $hostname);
 
 		$postparams = [	"action"	=>	"add_device",
 						"hostname"	=>	$hostname];
 
-		$OPTIONS = [
-		CURLOPT_RETURNTRANSFER  => true,
-		CURLOPT_FOLLOWLOCATION  => true,
-		CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
-			];
+		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+				'json' => $postparams,
+				'auth' => [
+					getenv('OBS_USERNAME'), 
+					getenv('OBS_PASSWORD')
+				],
+		]);
+		$DEVICE = json_decode($apiRequest->getBody()->getContents(), true);
 
-		$request = \Httpful\Request::post($URL);
-
-		foreach( $OPTIONS as $key => $val) {
-				$request->addOnCurlOption($key, $val);
-		}
-
-		$DEVICE = $request->body(json_encode($postparams))				//parameters to send in body
-							->send()										//execute the request
-							->body;											//only give us the body back
-
-		//$DEVICE = get_object_vars($DEVICE);
-		$DEVICE = \Metaclassing\Utility::objectToArray($DEVICE);
-
-		//\Metaclassing\Utility::dumper($DEVICE);
 		//If device is an ACCESS SWITCH, disable PORTS module.
-
 		if($DEVICE['success'] == true){
 			$reg = "/^\D{5}\S{3}.*(sw[api]|SW[API])[0-9]{2,4}.*$/";                   //regex to match ACCESS switches only
 			if (preg_match($reg,$hostname, $hits)){
-				$postparams2 = [	"action"	=>	"modify_device",
+				$postparams2 = [	"type"		=>	"device",
 									"id"		=>	$DEVICE['data']['device_id'],
-									"option"	=>	"disable_port_discovery",
+									"option"	=>	"discover_ports",
+									"value"		=>	"0",
 									//"debug"		=>	1,
-				];
-				$request2 = \Httpful\Request::post($URL);
-				$response2 = $request2->body(json_encode($postparams2))
-								->send()
-								->body;
+				];				
+				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+					'json' => $postparams2,
+					'auth' => [
+						getenv('OBS_USERNAME'), 
+						getenv('OBS_PASSWORD')
+					],						
+				]);
+				$response2 = json_decode($apiRequest->getBody()->getContents(), true);
 
-				$response2 = \Metaclassing\Utility::objectToArray($response2);
-
-				$postparams3 = [	"action"	=>	"modify_device",
+				$postparams3 = [	"type"		=>	"device",
 									"id"		=>	$DEVICE['data']['device_id'],
-									"option"	=>	"disable_port_polling",
-				];
-
-				$request3 = \Httpful\Request::post($URL);
-				$response3 = $request3->body(json_encode($postparams3))
-								->send()
-								->body;
-
-				$response3 = \Metaclassing\Utility::objectToArray($response3);
-
-				//\Metaclassing\Utility::dumper($response2);
-				//\Metaclassing\Utility::dumper($response3);
-
+									"option"	=>	"poll_ports",
+									"value"		=>	"0",
+									//"debug"		=>	1,
+				];				
+				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+					'json' => $postparams3,
+					'auth' => [
+						getenv('OBS_USERNAME'), 
+						getenv('OBS_PASSWORD')
+					],
+				]);
+				$response3 = json_decode($apiRequest->getBody()->getContents(), true);
 
 			}
 		}
@@ -403,22 +305,16 @@ class ObserviumSync
 	}
 
 	public function obs_add_devices(){
-                $this->logmsg .= "***ADD_DEVICES*** ";
+		$this->logmsg .= "***ADD_DEVICES*** ";
 		$counter = 0;
 		$adddevices = $this->obs_devices_to_add();
 		//print_r($adddevices);
-
-//		while($counter < 75){
-//                        \Metaclassing\Utility::dumper($this->obs_add_device($adddevices[$counter]));
-//			$counter++;
-//		}
-
 
 		foreach ($adddevices as $adddevice){
 			//print $adddevice . "\n";
 			//print "\n";
 			$this->logmsg .= $adddevice . ", ";
-			\Metaclassing\Utility::dumper($this->obs_add_device($adddevice));
+			print_r($this->obs_add_device($adddevice));
 			//print "\n";
 			//return $this->obs_add_device($adddevice);
 			//break;
@@ -428,34 +324,24 @@ class ObserviumSync
 
 	public function obs_remove_device($params){
 
-		$URL = $this->OBSBASEURL;
-
 		$postparams['action'] = "delete_device";
 		if ($params['id']){
 			$postparams['id'] = $params['id'];
 		} elseif ($params['hostname']){
-			$postparams['hostname'] = $params['hostname'];
+			$postparams['hostname'] = str_replace('/', '-', $params['hostname']);
 		} else {
 			return 'Missing parameter "id" or "hostname" !!!';
 		}
 
-		$OPTIONS = [
-		CURLOPT_RETURNTRANSFER  => true,
-		CURLOPT_FOLLOWLOCATION  => true,
-		CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
-			];
+		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+			'json' => $postparams,
+			'auth' => [
+				getenv('OBS_USERNAME'), 
+				getenv('OBS_PASSWORD')
+			],
+		]);
 
-		$request = \Httpful\Request::post($URL);
-
-		foreach( $OPTIONS as $key => $val) {
-				$request->addOnCurlOption($key, $val);
-		}
-		
-		$RESPONSE = $request->body(json_encode($postparams))				//parameters to send in body
-							->send()										//execute the request
-							->body;											//only give us the body back
-
-		$RESPONSE = \Metaclassing\Utility::objectToArray($RESPONSE);
+		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
 	
 		return $RESPONSE;
 	}
@@ -476,6 +362,7 @@ class ObserviumSync
 			$snowsitenames[] = $sitename;
 		}
 		sort($snowsitenames);
+		//print "SNOW SITE NAMES:\n";
 		//print_r($snowsitenames);
 
 		$obsgroups = $this->OBS_GROUPS;
@@ -488,6 +375,7 @@ class ObserviumSync
 			}
 		}
 		sort($obsgroupnames);
+		//print "OBS GROUP NAMES:\n";
 		//print_r($obsgroupnames);
 		
 		return array_values(array_diff($snowsitenames, $obsgroupnames));
@@ -519,8 +407,6 @@ class ObserviumSync
 	}
 
 	public function obs_add_site_group($sitename){
-		$URL = $this->OBSBASEURL;
-
 		$postparams = [	"action"				=>	"add_group",
 						"group_type"			=>	"device",
 						"name"					=>	"SITE_".$sitename,
@@ -529,25 +415,17 @@ class ObserviumSync
 						"entity_association"	=>	"*",
 						];
 
-		$OPTIONS = [
-		CURLOPT_RETURNTRANSFER  => true,
-		CURLOPT_FOLLOWLOCATION  => true,
-		CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
-			];
+		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+				'json' => $postparams,
+				'auth' => [
+					getenv('OBS_USERNAME'), 
+					getenv('OBS_PASSWORD')
+				],
+		]);
 
-		$request = \Httpful\Request::post($URL);
+		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
 
-		foreach( $OPTIONS as $key => $val) {
-				$request->addOnCurlOption($key, $val);
-		}
-		
-		$response = $request->body(json_encode($postparams))				//parameters to send in body
-							->send()										//execute the request
-							->body;											//only give us the body back
-		
-		//$DEVICE = get_object_vars($DEVICE);
-		$status = \Metaclassing\Utility::objectToArray($response);
-		return $status;
+		return $RESPONSE;
 	}
 
 	public function obs_add_site_groups(){
@@ -561,31 +439,22 @@ class ObserviumSync
 	}
 
 	public function obs_remove_site_group($sitename){
-		$URL = $this->OBSBASEURL;
 
 		$postparams = [	"action"				=>	"delete_group",
 						"name"					=>	$sitename,
 						];
 
-		$OPTIONS = [
-		CURLOPT_RETURNTRANSFER  => true,
-		CURLOPT_FOLLOWLOCATION  => true,
-		CURLOPT_USERAGENT       => "Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)",
-			];
+		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+				'json' => $postparams,
+				'auth' => [
+					getenv('OBS_USERNAME'), 
+					getenv('OBS_PASSWORD')
+				],
+		]);
 
-		$request = \Httpful\Request::post($URL);
-
-		foreach( $OPTIONS as $key => $val) {
-				$request->addOnCurlOption($key, $val);
-		}
+		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
 		
-		$response = $request->body(json_encode($postparams))				//parameters to send in body
-							->send()										//execute the request
-							->body;											//only give us the body back
-		
-		//$DEVICE = get_object_vars($DEVICE);
-		$status = \Metaclassing\Utility::objectToArray($response);
-		return $status;
+		return $RESPONSE;
 	}
 
 	public function obs_remove_site_groups(){
