@@ -104,7 +104,7 @@ class ObserviumSync
 		$apiRequest = $this->SnowClient->request('GET', getenv('SNOW_API_URI'), [
 			'query' => [
 				'u_active' => "true", 
-				'sysparm_fields' => "sys_id,name,street,u_street_2,city,state,zip,country"
+				'sysparm_fields' => "sys_id,name,street,u_street_2,city,state,zip,country,latitude,longitude"
 			],
 			'auth' => [
 				getenv('SNOW_USERNAME'), 
@@ -496,5 +496,65 @@ class ObserviumSync
 		}
 
 	}
+
+	public function obs_set_coords(){
+		//get devices
+		foreach($this->OBS_DEVICES as $deviceid => $device){
+			print $device['hostname'] . "\n";
+			$devicesite = strtolower(substr($device['hostname'],0,8));
+			foreach($this->SNOW_LOCS as $sitename => $site){
+				
+				if ($devicesite == strtolower($sitename)){
+					$addrstring = $sitename . "," . $site['street'] . "," . $site['city'] . "," . $site['state'] . "," . $site['zip'] . "," . $site['country'];
+					print $addrstring . "\n";
+					$postparams = [
+						"action"	=>	"set_entity_attrib",
+						"type"		=>	"device",
+						"id"		=>	$deviceid,
+						"option"	=>	"override_sysLocation_bool",
+						"value"		=>	"1",
+					];
+
+					$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+							'json' => $postparams,
+							'auth' => [
+								getenv('OBS_USERNAME'), 
+								getenv('OBS_PASSWORD')
+							],
+					]);
+					$DEVICE = json_decode($apiRequest->getBody()->getContents(), true);					
+					print_r($DEVICE);
+					print "\n";
+					$postparams2 = [
+						"action"	=>	"set_entity_attrib",
+						"type"		=>	"device",
+						"id"		=>	$deviceid,
+						"option"	=>	"override_sysLocation_string",
+						"value"		=>	$addrstring,
+					];
+
+					$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+							'json' => $postparams2,
+							'auth' => [
+								getenv('OBS_USERNAME'), 
+								getenv('OBS_PASSWORD')
+							],
+					]);
+					$DEVICE2 = json_decode($apiRequest->getBody()->getContents(), true);					
+					print_r($DEVICE2);
+					print "\n";
+					
+				}
+			
+			}
+			
+			
+			
+		}
+
+		//get sites
+		//$this->SNOW_LOCS
+	}
+
 /**/
 }
