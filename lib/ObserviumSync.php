@@ -497,7 +497,7 @@ class ObserviumSync
 
 	}
 
-	public function obs_set_coords(){
+	public function obs_set_location(){
 		//get devices
 		foreach($this->OBS_DEVICES as $deviceid => $device){
 			print $device['hostname'] . "\n";
