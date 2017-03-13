@@ -65,7 +65,7 @@ class ObserviumSync
 		$this->SnowClient = new GuzzleHttpClient([
 			'base_uri' => getenv('SNOW_BASE_URI'),
 		]);		
-		//$this->NM_DEVICES = $this->Netman_get_cisco_devices();		//populate array of switches from Network Management Platform
+		$this->NM_DEVICES = $this->Netman_get_cisco_devices();		//populate array of switches from Network Management Platform
 		$this->SNOW_LOCS = $this->Snow_get_valid_locations();	//populate a list of locations from SNOW
 		$this->OBS_DEVICES = $this->obs_get_devices();	//populate a list of Observium devices
 		$this->OBS_GROUPS = $this->obs_get_groups();
