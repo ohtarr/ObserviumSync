@@ -54,12 +54,12 @@ class ObserviumSync
 		$this->NetmonClient = new GuzzleHttpClient([
 			'base_uri' => getenv('OBSERVIUM_BASE_URI'),
 		]);
-		
-		$this->NetmanCookieJar = new FileCookieJar('ObserviumSyncCookieJar', true);		
+
+		//$this->NetmanCookieJar = new FileCookieJar('ObserviumSyncCookieJar', true);		
 		$this->NetmanClient = new GuzzleHttpClient([
 			'base_uri' => getenv('NETMAN_BASE_URI'),
-			'cookies' => $this->NetmanCookieJar,
-			'cert' => getenv('NETMAN_CERT'),
+			//'cookies' => $this->NetmanCookieJar,
+			//'cert' => getenv('NETMAN_CERT'),
 		]);
 		
 		$this->SnowClient = new GuzzleHttpClient([
@@ -122,6 +122,7 @@ class ObserviumSync
 		return $snowlocs;												//return new array
 	}
 
+	/*
 	public function Netman_get_cisco_devices()
 	{
 
@@ -147,9 +148,34 @@ class ObserviumSync
 			$newarray[$device['object']['data']['id']]['id'] = 		$device['object']['data']['id'];
 			$newarray[$device['object']['data']['id']]['ip'] = 		$device['object']['data']['ip'];
 			$newarray[$device['object']['data']['id']]['model'] = 	$device['object']['data']['model'];
+			
+			foreach (preg_split('/\r\n|\r|\n/', $device['object']['data']['run']) as $LINE) {
+				if (preg_match("/snmp-server location (.+)/", $LINE, $MATCH)) {
+					$SNMPLOCATION = $MATCH[1];
+					break;
+				}
+			}
+			$SNMPARRAY = json_decode($SNMPLOCATION,true);			
+			if (is_array($SNMPARRAY)) {
+				$newarray[$device['object']['data']['id']]['snmp'] = $SNMPARRAY;
+			}
+		
 		}
 		ksort($newarray);
 		return $newarray;
+
+	}
+	/**/
+
+	public function Netman_get_cisco_devices()
+	{
+		//perform GET request to netman to get list of devices that need to be monitored
+		$apiRequest = $this->NetmanClient->request('GET', "reports/device-monitoring.php");
+		//decode the JSON into an array
+		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);		
+		//print_r($RESPONSE);
+		//return the devices in the response.
+		return $RESPONSE['devices'];
 
 	}
 
@@ -189,23 +215,26 @@ class ObserviumSync
 	{
 		//build array of netman devices
 		$newnmarray = array();
-		foreach($this->NM_DEVICES as $nmid => $nmdevice){
-			if (!empty($nmdevice['name'])){
+		foreach($this->NM_DEVICES as $devicename => $nmdevice)
+		{
+			if($nmdevice['snmploc']['mon'] === 1 && !empty($nmdevice['name']))
+			{
 				$newnmarray[] = str_replace('/', '-', strtolower($nmdevice['name']));
 			}
 		}
 		sort($newnmarray);
-
+		//print_r($newnmarray);
 		//build array of observium devices
 		$newobsarray = array();
-		foreach($this->OBS_DEVICES as $obsid => $obsdevice){
+		foreach($this->OBS_DEVICES as $obsid => $obsdevice)
+		{
 			$newobsarray[] = str_replace('/', '-', $obsdevice['hostname']);
 
 			//$newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
 		}
 		sort($newobsarray);
-
-/*
+		//print_r($newobsarray);
+		/*
 		foreach($newobsarray as $key => $value){
 			if (empty($value)) {
 				unset($newobsarray[$key]);
@@ -223,27 +252,34 @@ class ObserviumSync
 
 	public function obs_devices_to_remove()
 	{
-
-		$newnmarray = array();
-		foreach($this->NM_DEVICES as $nmid => $nmdevice){
-			$newnmarray[] = str_replace('/', '-', strtolower($nmdevice['name']));
+		foreach($this->OBS_DEVICES as $obsid => $obsdevice)
+		{
+			$exists = 0;
+			$mon = 1;
+			foreach($this->NM_DEVICES as $nmdevicename => $nmdevice)
+			{
+				if($nmdevice['name'] == $obsdevice['hostname'])
+				{
+					$exists = 1;
+					if($nmdevice['snmploc']['mon'] === 0)
+					{
+						$mon = 0;
+					}
+					if($exists === 0 || $mon === 0)
+					{
+						$removedevices[] = str_replace('/', '-', $obsdevice['hostname']);
+					}
+					break;
+				}
+			}
 		}
-		sort($newnmarray);
-		//print_r($newnmarray);
-
-		//build array of observium devices
-		$newobsarray = array();
-		foreach($this->OBS_DEVICES as $obsid => $obsdevice){
-
-//			$newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
-			$newobsarray[] = str_replace('/', '-', $obsdevice['hostname']);
+		if (is_array($removedevices))
+		{
+			sort($removedevices);
+		} else {
+			print "No devices to remove!";
 		}
-		sort($newobsarray);
-		//print_r($newobsarray);
-
-		$newarray = array_values(array_diff($newobsarray, $newnmarray));
-
-		return $newarray;
+		return $removedevices;
 	}
 
 	public function obs_add_device($hostname)
@@ -295,7 +331,6 @@ class ObserviumSync
 					],
 				]);
 				$response3 = json_decode($apiRequest->getBody()->getContents(), true);
-
 			}
 		}
 		return $DEVICE;
@@ -317,7 +352,6 @@ class ObserviumSync
 			//return $this->obs_add_device($adddevice);
 			//break;
 		}
-
 	}
 
 	public function obs_remove_device($params)
@@ -363,23 +397,24 @@ class ObserviumSync
 			$snowsitenames[] = $sitename;
 		}
 		sort($snowsitenames);
-		//print "SNOW SITE NAMES:\n";
-		//print_r($snowsitenames);
 
 		$obsgroups = $this->OBS_GROUPS;
 
 		$regex = "/SITE_/";
 		$obsgroupnames = array();
-		foreach($obsgroups as $groupid => $group){
-			if(preg_match($regex, $group['group_name'], $hits)){
-				$obsgroupnames[] = substr($group['group_name'], 5);
+		if(!empty($obsgroups))
+		{
+			foreach($obsgroups as $groupid => $group){
+				if(preg_match($regex, $group['group_name'], $hits)){
+					$obsgroupnames[] = substr($group['group_name'], 5);
+				}
 			}
+			sort($obsgroupnames);
+			
+			return array_values(array_diff($snowsitenames, $obsgroupnames));
+		} else {
+			return $snowsitenames;
 		}
-		sort($obsgroupnames);
-		//print "OBS GROUP NAMES:\n";
-		//print_r($obsgroupnames);
-		
-		return array_values(array_diff($snowsitenames, $obsgroupnames));
 	}
 
 	public function obs_site_groups_to_remove()
@@ -397,15 +432,22 @@ class ObserviumSync
 
 		$obsgroupnames = array();
 		$regex = "/SITE_/";
-		foreach($obsgroups as $groupid => $group){
-			if(preg_match($regex, $group['group_name'], $hits)){
-				$obsgroupnames[] = $group['group_name'];
+		if(!empty($obsgroups))
+		{
+			foreach($obsgroups as $groupid => $group){
+				if(preg_match($regex, $group['group_name'], $hits)){
+					$obsgroupnames[] = $group['group_name'];
+				}
 			}
+			sort($obsgroupnames);
+			return array_values(array_diff($obsgroupnames, $snowsitenames));
+		} else {
+			return null;
 		}
-		sort($obsgroupnames);
+
 		//print_r($obsgroupnames);
 
-		return array_values(array_diff($obsgroupnames, $snowsitenames));
+
 	}
 
 	public function obs_add_site_group($sitename)
@@ -466,12 +508,13 @@ class ObserviumSync
 	{
                 $this->logmsg .= "***REMOVE_SITE-GROUPS*** ";
 		$delsites = $this->obs_site_groups_to_remove();
-
-		foreach ($delsites as $sitename){
-			$this->logmsg .= $sitename . ", ";
-			$this->obs_remove_site_group($sitename);
+		if(!empty($delsites))
+		{
+			foreach ($delsites as $sitename){
+				$this->logmsg .= $sitename . ", ";
+				$this->obs_remove_site_group($sitename);
+			}
 		}
-
 	}
 
 	public function obs_remove_all_site_groups()
@@ -564,45 +607,49 @@ class ObserviumSync
 	
 	public function obs_set_location_coords($deviceid,$lat,$lon)
 	{
-		$postparams = [
-			"action"	=>	"dbquery",
-			"table"		=>	"devices_locations",
-			"key"		=>	"device_id",
-			"id"		=>	$deviceid,
-		];
+		if($lat >= -90 && $lat <= 90 && $lon >= -180 && $lon <= 180 )
+		{
+			$postparams = [
+				"action"	=>	"dbquery",
+				"table"		=>	"devices_locations",
+				"key"		=>	"device_id",
+				"id"		=>	$deviceid,
+			];
 
-		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-				'json' => $postparams,
-				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
-				],
-		]);
-		$DEVICE = json_decode($apiRequest->getBody()->getContents(), true);					
-		
-		$obslocation = $DEVICE['data'][0];
-		
-		$postparams2 = [
-			"action"	=>	"dbupdate",
-			"params"	=>	[
-				"location_lat"		=>	$lat,
-				"location_lon"		=>	$lon,
-				"location_manual"	=>	"1",				
-			],
-			"table"		=>	"devices_locations",
-			"key"		=>	"location_id",
-			"id"		=>	$obslocation['location_id'],
-		];
+			$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+					'json' => $postparams,
+					'auth' => [
+						getenv('OBS_USERNAME'), 
+						getenv('OBS_PASSWORD')
+					],
+			]);
+			$DEVICE = json_decode($apiRequest->getBody()->getContents(), true);					
+			if ($DEVICE['success'])
+			{
+				$obslocation = $DEVICE['data'][0];
+				
+				$postparams2 = [
+					"action"	=>	"dbupdate",
+					"params"	=>	[
+						"location_lat"		=>	$lat,
+						"location_lon"		=>	$lon,
+						"location_manual"	=>	"1",				
+					],
+					"table"		=>	"devices_locations",
+					"key"		=>	"location_id",
+					"id"		=>	$obslocation['location_id'],
+				];
 
-		$apiRequest2 = $this->NetmonClient->request('POST', 'api/', [
-				'json' => $postparams2,
-				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
-				],
-		]);
-		$DEVICE2 = json_decode($apiRequest2->getBody()->getContents(), true);					
-
+				$apiRequest2 = $this->NetmonClient->request('POST', 'api/', [
+						'json' => $postparams2,
+						'auth' => [
+							getenv('OBS_USERNAME'), 
+							getenv('OBS_PASSWORD')
+						],
+				]);
+				$DEVICE2 = json_decode($apiRequest2->getBody()->getContents(), true);	
+			}
+		}
 		if($DEVICE2['success'])
 		{
 			return true;
@@ -611,27 +658,85 @@ class ObserviumSync
 		}
 	}
 
+	public function get_nm_device($hostname,$NMDEVICES)
+	{
+		foreach($NMDEVICES as $devicename => $device)
+		{
+			if (strtoupper($hostname) == strtoupper($devicename))
+			{
+				$return = $device;
+				break;
+			}
+		}
+		if ($return)
+		{
+			return $return;
+		} else {
+			return null;
+		}
+	}
+	
+	public function get_snow_location($locname,$SNOW_LOCS)
+	{
+		foreach($SNOW_LOCS as $sitename => $site)
+		{
+			if (strtoupper($locname) == strtoupper($sitename))
+			{
+				$return = $site;
+				break;
+			}		
+		}
+		if ($return)
+		{
+			return $return;
+		} else {
+			return null;
+		}
+	}
+
 	public function obs_set_locations()
 	{
-		foreach($this->OBS_DEVICES as $deviceid => $device){
-			$locname = strtoupper(substr($device['hostname'],0,8));
-			print "DEVICE ID: " . $deviceid . "\n";
-			print "LOCATION NAME: " . $locname . "\n";
-
-			if($site = $this->SNOW_LOCS[$locname]){
-				//print_r($site);
-				$addrstring = $site['name'] . "," . $site['street'] . "," . $site['city'] . "," . $site['state'] . "," . $site['zip'] . "," . $site['country'];
-				print "ADDRESS STRING: " . $addrstring . "\n";
-				print "SET LOC STRING : \n";
-				print $this->obs_set_location_string($deviceid, $addrstring) . "\n";
-				print "COORDS: " . $site['latitude'] . ", " . $site['longitude'] . "\n";
-				if (strlen($site['latitude']) > 0 && strlen($site['longitude']) > 0 && $site['latitude'] >= -90 && $site['latitude'] <= 90 && $site['longitude'] >= -180 && $site['longitude'] <= 180)
+		foreach($this->OBS_DEVICES as $deviceid => $device)
+		{
+			//$locname = strtoupper(substr($device['hostname'],0,8));
+			unset($nmdevice);
+			unset($locname);
+			if($nmdevice = $this->get_nm_device($device['hostname'],$this->NM_DEVICES))
+			{
+				print "DEVICE ID: " . $deviceid . "\n";				
+				if($locname = $nmdevice['snmploc']['site'])
 				{
-					print "SET COORDS : \n";
-					print $this->obs_set_location_coords($deviceid,$site['latitude'],$site['longitude']) . "\n";
+					print "LOCATION NAME: " . $locname . "\n";
+					//if($site = $this->SNOW_LOCS[$locname]){
+					if($site = $this->get_snow_location($locname, $this->SNOW_LOCS))
+					{
+						//print_r($site);
+						$addrstring = $site['name'] . "," . $site['street'] . "," . $site['city'] . "," . $site['state'] . "," . $site['zip'] . "," . $site['country'];
+						print "ADDRESS STRING: " . $addrstring . "\n";
+						print "SET LOC STRING : \n";
+						print $this->obs_set_location_string($deviceid, $addrstring) . "\n";
+						print "COORDS: " . $site['latitude'] . ", " . $site['longitude'] . "\n";
+						if (strlen($site['latitude']) > 0 && strlen($site['longitude']) > 0 && $site['latitude'] >= -90 && $site['latitude'] <= 90 && $site['longitude'] >= -180 && $site['longitude'] <= 180)
+						{
+							print "SET COORDS : \n";
+							print $this->obs_set_location_coords($deviceid,$site['latitude'],$site['longitude']) . "\n";
+						} else {
+							print "COORDS INVALID OR MISSING!!! SET DEFAULT COORDS : \n";
+							print $this->obs_set_location_coords($deviceid,37.7463058,-45.0000000) . "\n";							
+						}
+					} else {
+						print "No SITE found in SNOW! \n";
+						continue;
+					}
+				//break; //debugging
+				} else {
+					print "No LOCATION found for device in Network Manager! \n";
+					continue;
 				}
+			} else {
+				print "No device found in Network Manager! \n";
+				continue;
 			}
-			//break; //debugging
 		}
 	}
 	
@@ -680,5 +785,24 @@ class ObserviumSync
 		}
 	}
 
+    public function obs_add_50_devices()
+    {
+        $this->logmsg .= "***ADD_DEVICES*** ";
+        $counter = 0;
+        $adddevices = $this->obs_devices_to_add();
+        //print_r($adddevices);
+
+        foreach ($adddevices as $adddevice){
+			if($counter < 50)
+			{
+	            $this->logmsg .= $adddevice . ", ";
+	            print_r($this->obs_add_device($adddevice));
+				$counter++;
+			} else {
+				break;
+			}
+        }
+
+    }
 /**/
 }
