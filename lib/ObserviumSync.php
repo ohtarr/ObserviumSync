@@ -170,7 +170,7 @@ class ObserviumSync
 	public function Netman_get_cisco_devices()
 	{
 		//perform GET request to netman to get list of devices that need to be monitored
-		$apiRequest = $this->NetmanClient->request('GET', "reports/device-monitoring.php");
+		$apiRequest = $this->NetmanClient->request('GET', "reports/device-monitoring-netmon.php");
 		//decode the JSON into an array
 		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);		
 		//print_r($RESPONSE);
@@ -211,6 +211,60 @@ class ObserviumSync
 		return $groups['data'];
 	}
 
+	public function get_nm_device($hostname,$NMDEVICES)
+	{
+		foreach($NMDEVICES as $devicename => $device)
+		{
+			if (strtoupper($hostname) == strtoupper($devicename))
+			{
+				$return = $device;
+				break;
+			}
+		}
+		if ($return)
+		{
+			return $return;
+		} else {
+			return null;
+		}
+	}
+
+	public function get_obs_device($hostname,$OBSDEVICES)
+	{
+		foreach($OBSDEVICES as $device)
+		{
+			if (strtoupper($hostname) == strtoupper($device['hostname']))
+			{
+				$return = $device;
+				break;
+			}
+		}
+		if ($return)
+		{
+			return $return;
+		} else {
+			return null;
+		}
+	}
+
+	public function get_snow_location($locname,$SNOW_LOCS)
+	{
+		foreach($SNOW_LOCS as $sitename => $site)
+		{
+			if (strtoupper($locname) == strtoupper($sitename))
+			{
+				$return = $site;
+				break;
+			}		
+		}
+		if ($return)
+		{
+			return $return;
+		} else {
+			return null;
+		}
+	}
+
 	public function obs_devices_to_add()
 	{
 		//build array of netman devices
@@ -219,7 +273,7 @@ class ObserviumSync
 		{
 			if($nmdevice['snmploc']['mon'] === 1 && !empty($nmdevice['name']))
 			{
-				$newnmarray[] = str_replace('/', '-', strtolower($nmdevice['name']));
+				$newnmarray[] = $nmdevice['name'];
 			}
 		}
 		sort($newnmarray);
@@ -228,7 +282,7 @@ class ObserviumSync
 		$newobsarray = array();
 		foreach($this->OBS_DEVICES as $obsid => $obsdevice)
 		{
-			$newobsarray[] = str_replace('/', '-', $obsdevice['hostname']);
+			$newobsarray[] = $obsdevice['hostname'];
 
 			//$newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
 		}
@@ -267,7 +321,7 @@ class ObserviumSync
 					}
 					if($exists === 0 || $mon === 0)
 					{
-						$removedevices[] = str_replace('/', '-', $obsdevice['hostname']);
+						$removedevices[] = $obsdevice['hostname'];
 					}
 					break;
 				}
@@ -284,7 +338,7 @@ class ObserviumSync
 
 	public function obs_add_device($hostname)
 	{
-		$hostname = str_replace('/', '-', $hostname);
+		$hostname = $hostname;
 
 		$postparams = [	"action"	=>	"add_device",
 						"hostname"	=>	$hostname];
@@ -361,7 +415,7 @@ class ObserviumSync
 		if ($params['id']){
 			$postparams['id'] = $params['id'];
 		} elseif ($params['hostname']){
-			$postparams['hostname'] = str_replace('/', '-', $params['hostname']);
+			$postparams['hostname'] = $params['hostname'];
 		} else {
 			return 'Missing parameter "id" or "hostname" !!!';
 		}
@@ -658,42 +712,6 @@ class ObserviumSync
 		}
 	}
 
-	public function get_nm_device($hostname,$NMDEVICES)
-	{
-		foreach($NMDEVICES as $devicename => $device)
-		{
-			if (strtoupper($hostname) == strtoupper($devicename))
-			{
-				$return = $device;
-				break;
-			}
-		}
-		if ($return)
-		{
-			return $return;
-		} else {
-			return null;
-		}
-	}
-	
-	public function get_snow_location($locname,$SNOW_LOCS)
-	{
-		foreach($SNOW_LOCS as $sitename => $site)
-		{
-			if (strtoupper($locname) == strtoupper($sitename))
-			{
-				$return = $site;
-				break;
-			}		
-		}
-		if ($return)
-		{
-			return $return;
-		} else {
-			return null;
-		}
-	}
-
 	public function obs_set_locations()
 	{
 		foreach($this->OBS_DEVICES as $deviceid => $device)
@@ -804,5 +822,152 @@ class ObserviumSync
         }
 
     }
+	
+	public function obs_device_toggle_ignore($hostname, $ignore)
+	{
+		if($hostname)
+		{
+			if($ignore === 0 || $ignore === 1)
+			{
+				$postparams = [
+					'action'	=>	'dbupdate',
+					'table'		=>	'devices',
+					'key'		=>	'hostname',
+					'id'		=>	$hostname,
+					'params'	=>	[
+						'ignore'	=>	$ignore
+					]
+				];
+
+				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+					'json' => $postparams,
+					'auth' => [
+						getenv('OBS_USERNAME'), 
+						getenv('OBS_PASSWORD')
+					],
+				]);
+
+				$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
+			
+				return $RESPONSE;
+			} else {
+				print "Invalid parameter provided!";
+				return 0;
+			}
+		} else {
+			print "No hostname found!";
+			return 0;
+		}
+	}
+	/*
+	public function obs_devices_to_ignore()
+	{
+		foreach($this->NM_DEVICES as $nmdevicename => $nmdevice)
+		{
+			if($nmdevice['snmploc']['alert'] === 0)
+			{
+				print $nmdevicename . "\n";
+				$obsdevice = $this->get_obs_device($nmdevicename, $this->OBS_DEVICES);
+				if($obsdevice['ignore'] === 0)
+				{
+					$ignoredevices[] = $nmdevicename;
+				}
+			}
+		}
+		sort($ignoredevices);
+		return $ignoredevices;
+	}
+	/**/
+	public function obs_devices_to_ignore()
+	{
+		foreach($this->OBS_DEVICES as $obsdevice)
+		{
+			if($obsdevice['ignore'] == 0)
+			{
+				if($nmdevice = $this->get_nm_device($obsdevice['hostname'],$this->NM_DEVICES))
+				{
+					if($nmdevice['snmploc']['alert'] === 0)
+					{
+						$ignoredevices[] = $obsdevice['hostname'];
+					}
+				}
+			}
+		}
+		if(isset($ignoredevices))
+		{
+			sort($ignoredevices);
+			return $ignoredevices;
+		} else {
+			return null;
+		}
+
+	}	
+
+	public function obs_devices_to_unignore()
+	{
+		foreach($this->OBS_DEVICES as $obsdevice)
+		{
+			if($obsdevice['ignore'] == 1)
+			{
+				if($nmdevice = $this->get_nm_device($obsdevice['hostname'],$this->NM_DEVICES))
+				{
+					if($nmdevice['snmploc']['alert'] === 1)
+					{
+						$unignoredevices[] = $obsdevice['hostname'];
+					}
+				}
+			}
+		}
+		if(isset($unignoredevices))
+		{
+			sort($unignoredevices);
+			return $unignoredevices;
+		} else {
+			return null;
+		}
+
+	}	
+
+	/*
+	public function obs_devices_to_unignore()
+	{
+		$nmdevices = $this->NM_DEVICES;
+		foreach($nmdevices as $nmdevicename => $nmdevice)
+		{
+			if($nmdevice['snmploc']['alert'] === 1)
+			{
+				$unignoredevices[] = $nmdevicename;
+			}
+		}
+		sort($unignoredevices);
+		return $unignoredevices;
+	}
+	/**/
+	public function obs_ignore_devices()
+	{
+		$ignoredevices = $this->obs_devices_to_ignore();
+		if($ignoredevices)
+		{
+			foreach($ignoredevices as $ignoredevice)
+			{
+				print "IGNORE DEVICE : " . $ignoredevice . "\n";
+				$this->obs_device_toggle_ignore($ignoredevice, 1);
+			}
+		}
+	}
+
+	public function obs_unignore_devices()
+	{
+		$unignoredevices = $this->obs_devices_to_unignore();
+		if($unignoredevices)
+		{
+			foreach($unignoredevices as $unignoredevice)
+			{
+				print "UNIGNORE DEVICE : " . $unignoredevice . "\n";
+				$this->obs_device_toggle_ignore($unignoredevice, 0);
+			}
+		}
+	}
+	/**/
 /**/
 }
