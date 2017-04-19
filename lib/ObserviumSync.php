@@ -104,8 +104,8 @@ class ObserviumSync
 
 		$apiRequest = $this->SnowClient->request('GET', getenv('SNOW_API_URI'), [
 			'query' => [
-				'u_active' => "true", 
-				'sysparm_fields' => "sys_id,name,street,u_street_2,city,state,zip,country,latitude,longitude"
+				//'u_active' => "true", 
+				'sysparm_fields' => "sys_id,u_active,name,street,u_street_2,city,state,zip,country,latitude,longitude"
 			],
 			'auth' => [
 				getenv('SNOW_USERNAME'), 
@@ -181,8 +181,6 @@ class ObserviumSync
 
 	public function obs_get_devices()
 	{
-
-		
 		$apiRequest = $this->NetmonClient->request('GET', 'api/', [
 			'query' => ['type' => 'device'],
 			'auth' => [
@@ -194,7 +192,6 @@ class ObserviumSync
 		$devices = json_decode($apiRequest->getBody()->getContents(), true);
 
 		return $devices['data'];
-
 	}
 
 	public function obs_get_groups(){
@@ -209,6 +206,42 @@ class ObserviumSync
 		$groups = json_decode($apiRequest->getBody()->getContents(), true);
 
 		return $groups['data'];
+	}
+
+	public function obs_get_ports($obsdeviceid)
+	{
+		$postparams = [
+			"action"	=>	"dbquery",
+			"table"		=>	"ports",
+			"key"		=>	"device_id",
+			"id"		=>	$obsdeviceid,									
+		];
+
+		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+				'json' => $postparams,
+				'auth' => [
+					getenv('OBS_USERNAME'), 
+					getenv('OBS_PASSWORD')
+				],
+		]);
+
+		if($ports = json_decode($apiRequest->getBody()->getContents(), true))
+		{
+			return $ports['data'];
+		} else {
+			return null;
+		}
+	}
+
+	public function obs_get_port($ports, $intname)
+	{
+		foreach($ports as $port)
+		{
+			if(strtolower($port['port_label']) == strtolower($intname))
+			{
+				return $port;
+			}
+		}
 	}
 
 	public function get_nm_device($hostname,$NMDEVICES)
@@ -448,10 +481,13 @@ class ObserviumSync
 		$snowsites = $this->SNOW_LOCS;
 		
 		foreach($snowsites as $sitename => $site){
-			$snowsitenames[] = $sitename;
+			if($site['u_active'] == "true")
+			{
+				$snowsitenames[] = $sitename;
+			}
 		}
 		sort($snowsitenames);
-
+		
 		$obsgroups = $this->OBS_GROUPS;
 
 		$regex = "/SITE_/";
@@ -464,7 +500,7 @@ class ObserviumSync
 				}
 			}
 			sort($obsgroupnames);
-			
+
 			return array_values(array_diff($snowsitenames, $obsgroupnames));
 		} else {
 			return $snowsitenames;
@@ -477,7 +513,10 @@ class ObserviumSync
 		$snowsites = $this->SNOW_LOCS;
 		
 		foreach($snowsites as $sitename => $site){
-			$snowsitenames[] = "SITE_" . $sitename;
+			if($site['u_active'] == true)
+			{
+				$snowsitenames[] = "SITE_" . $sitename;
+			}
 		}
 		sort($snowsitenames);
 		//print_r($snowsitenames);
@@ -965,6 +1004,312 @@ class ObserviumSync
 			{
 				print "UNIGNORE DEVICE : " . $unignoredevice . "\n";
 				$this->obs_device_toggle_ignore($unignoredevice, 0);
+			}
+		}
+	}
+	
+	public function obs_port_toggle_ignore($portid, $ignore)
+	{
+		if($portid)
+		{
+			if($ignore === 0 || $ignore === 1)
+			{
+				$postparams = [
+					'action'	=>	'dbupdate',
+					'table'		=>	'ports',
+					'key'		=>	'port_id',
+					'id'		=>	$portid,
+					'params'	=>	[
+						'ignore'	=>	$ignore
+					]
+				];
+
+				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+					'json' => $postparams,
+					'auth' => [
+						getenv('OBS_USERNAME'), 
+						getenv('OBS_PASSWORD')
+					],
+				]);
+
+				$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
+			
+				return $RESPONSE;
+			} else {
+				print "Invalid parameter provided!";
+				return 0;
+			}
+		} else {
+			print "No PORT ID found!";
+			return 0;
+		}
+	}
+	
+	public function obs_ports_to_ignore()
+	{
+		foreach($this->NM_DEVICES as $nmdevice)
+		{
+			if($nmdevice['interfaces'])
+			{
+				//print "INTERFACES EXIST on " . $nmdevice['name'] . "!!\n";
+				if($obsdevice = $this->get_obs_device($nmdevice['name'],$this->OBS_DEVICES))
+				{
+					//print "OBS DEVICE EXISTS! \n";
+					if($obsports = $this->obs_get_ports($obsdevice['device_id']))
+					{
+						//print "OBTAINED OBS DEVICE PORTS! \n";
+						foreach($nmdevice['interfaces'] as $iname => $iconfig)
+						{
+							//print_r($iconfig);
+							if($iconfig['description']['ALERT'] === 0)
+							{
+								//print $nmdevice['name'] . " interface " . $iname . " is set to ALERT=1! \n";
+								if($obsport = $this->obs_get_port($obsports,$iname))
+								{
+									//print "RETRIEVED OBS PORT!\n";
+									if($obsport['ignore'] == 0)
+									{
+										//print "OBS PORT IS CURRENTLY IGNORED!! ADD TO ARRAY!\n";
+										$ignoreports[] = [
+											"device_name"		=>	$nmdevice['name'],
+											"port_name"			=>	$obsport['port_label'],
+											"obs_device_id"		=>	$obsdevice['device_id'],
+											"obs_port_id"		=>	$obsport['port_id'],
+										];
+									}
+								}
+							}
+						}
+					}
+				}						
+			}
+		}
+		if(isset($ignoreports))
+		{
+			return $ignoreports;
+		} else {
+			return null;
+		}
+	}	
+
+	public function obs_ports_to_unignore()
+	{
+		foreach($this->NM_DEVICES as $nmdevice)
+		{
+			if($nmdevice['interfaces'])
+			{
+				//print "INTERFACES EXIST on " . $nmdevice['name'] . "!!\n";
+				if($obsdevice = $this->get_obs_device($nmdevice['name'],$this->OBS_DEVICES))
+				{
+					//print "OBS DEVICE EXISTS! \n";
+					if($obsports = $this->obs_get_ports($obsdevice['device_id']))
+					{
+						//print "OBTAINED OBS DEVICE PORTS! \n";
+						foreach($nmdevice['interfaces'] as $iname => $iconfig)
+						{
+							//print_r($iconfig);
+							if($iconfig['description']['ALERT'] === 1)
+							{
+								//print $nmdevice['name'] . " interface " . $iname . " is set to ALERT=1! \n";
+								if($obsport = $this->obs_get_port($obsports,$iname))
+								{
+									//print "RETRIEVED OBS PORT!\n";
+									if($obsport['ignore'] == 1)
+									{
+										//print "OBS PORT IS CURRENTLY IGNORED!! ADD TO ARRAY!\n";
+										$unignoreports[] = [
+											"device_name"		=>	$nmdevice['name'],
+											"port_name"			=>	$obsport['port_label'],
+											"obs_device_id"		=>	$obsdevice['device_id'],
+											"obs_port_id"		=>	$obsport['port_id'],
+										];
+									}
+								}
+							}
+						}
+					}
+				}						
+			}
+		}
+		if(isset($unignoreports))
+		{
+			return $unignoreports;
+		} else {
+			return null;
+		}
+	}
+	
+	public function obs_ignore_ports()
+	{
+		if($ignoreports = $this->obs_ports_to_ignore())
+		{		
+			foreach($ignoreports as $ignoreport)
+			{
+				$this->obs_port_toggle_ignore($ignoreport['obs_port_id'], 1);
+			}
+		}
+	}
+	
+	public function obs_unignore_ports()
+	{
+		if($unignoreports = $this->obs_ports_to_unignore())
+		{
+			foreach($unignoreports as $unignoreport)
+			{
+				$this->obs_port_toggle_ignore($unignoreport['obs_port_id'], 0);
+			}
+		}
+	}
+	
+	public function obs_port_toggle_disabled($portid, $disabled)
+	{
+		if($portid)
+		{
+			if($disabled === 0 || $disabled === 1)
+			{
+				$postparams = [
+					'action'	=>	'dbupdate',
+					'table'		=>	'ports',
+					'key'		=>	'port_id',
+					'id'		=>	$portid,
+					'params'	=>	[
+						'disabled'	=>	$disabled
+					]
+				];
+
+				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+					'json' => $postparams,
+					'auth' => [
+						getenv('OBS_USERNAME'), 
+						getenv('OBS_PASSWORD')
+					],
+				]);
+
+				$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
+			
+				return $RESPONSE;
+			} else {
+				print "Invalid parameter provided!";
+				return 0;
+			}
+		} else {
+			print "No PORT ID found!";
+			return 0;
+		}
+	}
+	
+	public function obs_ports_to_disable()
+	{
+		foreach($this->NM_DEVICES as $nmdevice)
+		{
+			if($nmdevice['interfaces'])
+			{
+				//print "INTERFACES EXIST on " . $nmdevice['name'] . "!!\n";
+				if($obsdevice = $this->get_obs_device($nmdevice['name'],$this->OBS_DEVICES))
+				{
+					//print "OBS DEVICE EXISTS! \n";
+					if($obsports = $this->obs_get_ports($obsdevice['device_id']))
+					{
+						//print "OBTAINED OBS DEVICE PORTS! \n";
+						foreach($nmdevice['interfaces'] as $iname => $iconfig)
+						{
+							//print_r($iconfig);
+							if($iconfig['description']['MON'] === 0)
+							{
+								//print $nmdevice['name'] . " interface " . $iname . " is set to ALERT=1! \n";
+								if($obsport = $this->obs_get_port($obsports,$iname))
+								{
+									//print "RETRIEVED OBS PORT!\n";
+									if($obsport['disabled'] == 0)
+									{
+										//print "OBS PORT IS CURRENTLY IGNORED!! ADD TO ARRAY!\n";
+										$disableports[] = [
+											"device_name"		=>	$nmdevice['name'],
+											"port_name"			=>	$obsport['port_label'],
+											"obs_device_id"		=>	$obsdevice['device_id'],
+											"obs_port_id"		=>	$obsport['port_id'],
+										];
+									}
+								}
+							}
+						}
+					}
+				}						
+			}
+		}
+		if(isset($disableports))
+		{
+			return $disableports;
+		} else {
+			return null;
+		}
+	}
+	
+	public function obs_ports_to_enable()
+	{
+		foreach($this->NM_DEVICES as $nmdevice)
+		{
+			if($nmdevice['interfaces'])
+			{
+				//print "INTERFACES EXIST on " . $nmdevice['name'] . "!!\n";
+				if($obsdevice = $this->get_obs_device($nmdevice['name'],$this->OBS_DEVICES))
+				{
+					//print "OBS DEVICE EXISTS! \n";
+					if($obsports = $this->obs_get_ports($obsdevice['device_id']))
+					{
+						//print "OBTAINED OBS DEVICE PORTS! \n";
+						foreach($nmdevice['interfaces'] as $iname => $iconfig)
+						{
+							//print_r($iconfig);
+							if($iconfig['description']['MON'] === 1)
+							{
+								//print $nmdevice['name'] . " interface " . $iname . " is set to ALERT=1! \n";
+								if($obsport = $this->obs_get_port($obsports,$iname))
+								{
+									//print "RETRIEVED OBS PORT!\n";
+									if($obsport['disabled'] == 1)
+									{
+										//print "OBS PORT IS CURRENTLY IGNORED!! ADD TO ARRAY!\n";
+										$enableports[] = [
+											"device_name"		=>	$nmdevice['name'],
+											"port_name"			=>	$obsport['port_label'],
+											"obs_device_id"		=>	$obsdevice['device_id'],
+											"obs_port_id"		=>	$obsport['port_id'],
+										];
+									}
+								}
+							}
+						}
+					}
+				}						
+			}
+		}
+		if(isset($enableports))
+		{
+			return $enableports;
+		} else {
+			return null;
+		}
+	}
+
+	public function obs_disable_ports()
+	{
+		if($disableports = $this->obs_ports_to_disable())
+		{		
+			foreach($disableports as $disableport)
+			{
+				$this->obs_port_toggle_disabled($disableport['obs_port_id'], 1);
+			}
+		}
+	}
+	
+	public function obs_enable_ports()
+	{
+		if($enableports = $this->obs_ports_to_enable())
+		{		
+			foreach($enableports as $enableport)
+			{
+				$this->obs_port_toggle_disabled($enableport['obs_port_id'], 0);
 			}
 		}
 	}
