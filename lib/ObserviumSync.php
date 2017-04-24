@@ -341,23 +341,23 @@ class ObserviumSync
 	{
 		foreach($this->OBS_DEVICES as $obsid => $obsdevice)
 		{
+			//print "OBS DEVICE: " . $obsdevice['hostname'] . "\n";
 			$exists = 0;
 			$mon = 1;
-			foreach($this->NM_DEVICES as $nmdevicename => $nmdevice)
+			if($nmdevice = $this->get_nm_device($obsdevice['hostname'],$this->NM_DEVICES))
 			{
-				if($nmdevice['name'] == $obsdevice['hostname'])
+				//print "Device " . $obsdevice['hostname'] . " Exists in NETMAN!\n";
+				$exists = 1;
+				if($nmdevice['snmploc']['mon'] === 0)
 				{
-					$exists = 1;
-					if($nmdevice['snmploc']['mon'] === 0)
-					{
-						$mon = 0;
-					}
-					if($exists === 0 || $mon === 0)
-					{
-						$removedevices[] = $obsdevice['hostname'];
-					}
-					break;
+					//print "Mon = 0\n";
+					$mon = 0;
 				}
+			}
+			if($exists === 0 || $mon === 0)
+			{
+				//print "Adding to array to remove!!\n";
+				$removedevices[] = $obsdevice['hostname'];
 			}
 		}
 		if (is_array($removedevices))
