@@ -42,7 +42,6 @@ class ObserviumSync
 	public $SNOW_LOCS;			//array of locations from SNOW
 	public $logmsg = "";
 	public $NetmonClient;
-	public $NetmanCookieJar;		
 	public $NetmanClient;
 	public $SnowClient;
 
@@ -55,16 +54,14 @@ class ObserviumSync
 			'base_uri' => getenv('OBSERVIUM_BASE_URI'),
 		]);
 
-		//$this->NetmanCookieJar = new FileCookieJar('ObserviumSyncCookieJar', true);		
 		$this->NetmanClient = new GuzzleHttpClient([
 			'base_uri' => getenv('NETMAN_BASE_URI'),
-			//'cookies' => $this->NetmanCookieJar,
 			//'cert' => getenv('NETMAN_CERT'),
 		]);
-		
+
 		$this->SnowClient = new GuzzleHttpClient([
 			'base_uri' => getenv('SNOW_BASE_URI'),
-		]);		
+		]);
 		$this->NM_DEVICES = $this->Netman_get_cisco_devices();		//populate array of switches from Network Management Platform
 		$this->SNOW_LOCS = $this->Snow_get_valid_locations();	//populate a list of locations from SNOW
 		$this->OBS_DEVICES = $this->obs_get_devices();	//populate a list of Observium devices
