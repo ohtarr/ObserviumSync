@@ -62,6 +62,11 @@ class ObserviumSync
 		$this->SnowClient = new GuzzleHttpClient([
 			'base_uri' => getenv('SNOW_BASE_URI'),
 		]);
+
+		$this->DcoapiClient = new GuzzleHttpClient([
+			'base_uri' => getenv('DCOAPI_BASE_URI'),
+		]);
+		
 		$this->NM_DEVICES = $this->Netman_get_cisco_devices();		//populate array of switches from Network Management Platform
 		$this->SNOW_LOCS = $this->Snow_get_valid_locations();	//populate a list of locations from SNOW
 		$this->OBS_DEVICES = $this->obs_get_devices();	//populate a list of Observium devices
@@ -1428,6 +1433,81 @@ class ObserviumSync
 		]);
 
 		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
+		return $RESPONSE['success'];
+	}
+	
+	public function obs_update_networkservices_oncall()
+	{
+		$contact_name = "Network Services OnCall";
+		$emailsuffix = "@vtext.com";
+
+		$postparams = [
+			'username'	=>	getenv('DCOAPI_USERNAME'),
+			'password'	=>	getenv('DCOAPI_PASSWORD'),
+		];
+		//Build a Guzzle POST request
+		$apiRequest = $this->DcoapiClient->request('POST', 'telephony/api/authenticate', [
+			'json' => $postparams,
+		]);
+
+		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
+		
+		$dcoapi_token = $RESPONSE['token'];
+
+		//Build a Guzzle POST request
+		$apiRequest = $this->DcoapiClient->request('GET', 'telephony/api/cucm/line/Global-All-Lines/4029435001', [
+			'query' => [
+				'token' => $dcoapi_token
+			],
+		]);
+
+		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);	
+		
+		$oncallnum = ltrim($RESPONSE['response']['callForwardAll']['destination'],"1+");
+
+		$postparams = [
+			'action'	=>	'dbquery',
+			'table'		=>	'alert_contacts',
+			'key'		=>	'contact_descr',
+			'id'		=>	$contact_name
+		];
+		//Build a Guzzle POST request
+		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+			'json' => $postparams,
+			'auth' => [
+				getenv('OBS_USERNAME'), 
+				getenv('OBS_PASSWORD')
+			],
+		]);
+
+		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
+
+		if($RESPONSE['success'])
+		{
+			$contact_id = $RESPONSE['data'][0]['contact_id'];
+		} else {
+			return false;
+		}
+
+		$postparams = [
+			'action'	=>	'dbupdate',
+			'table'		=>	'alert_contacts',
+			'key'		=>	'contact_id',
+			'id'		=>	$contact_id,
+			'params'	=>	[
+				'contact_endpoint'	=>	"{\"email\":\"{$oncallnum}{$emailsuffix}\"}"
+			]
+		];
+		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+			'json' => $postparams,
+			'auth' => [
+				getenv('OBS_USERNAME'), 
+				getenv('OBS_PASSWORD')
+			],
+		]);
+
+		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
+
 		return $RESPONSE['success'];
 	}
 	/**/
