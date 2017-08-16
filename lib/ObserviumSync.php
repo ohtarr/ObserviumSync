@@ -67,10 +67,10 @@ class ObserviumSync
 			'base_uri' => getenv('DCOAPI_BASE_URI'),
 		]);
 		
-		$this->NM_DEVICES = $this->Netman_get_cisco_devices();		//populate array of switches from Network Management Platform
-		$this->SNOW_LOCS = $this->Snow_get_valid_locations();	//populate a list of locations from SNOW
-		$this->OBS_DEVICES = $this->obs_get_devices();	//populate a list of Observium devices
-		$this->OBS_GROUPS = $this->obs_get_groups();
+		//$this->NM_DEVICES = $this->Netman_get_cisco_devices();		//populate array of switches from Network Management Platform
+		//$this->SNOW_LOCS = $this->Snow_get_valid_locations();	//populate a list of locations from SNOW
+		//$this->OBS_DEVICES = $this->obs_get_devices();	//populate a list of Observium devices
+		//$this->OBS_GROUPS = $this->obs_get_groups();
 /*
 		if (empty($this->NM_DEVICES)		||
 			empty($this->SNOW_LOCS)			||
@@ -103,25 +103,31 @@ class ObserviumSync
 	/**/
 	public function Snow_get_valid_locations()
 	{
-		//Build a Guzzle GET request, get all SNOW locs, active and innactive.
-		$apiRequest = $this->SnowClient->request('GET', getenv('SNOW_API_URI'), [
-			'query' => [
-				//'u_active' => "true", 
-				'sysparm_fields' => "sys_id,u_active,name,street,u_street_2,city,state,zip,country,latitude,longitude"
-			],
-			'auth' => [
-				getenv('SNOW_USERNAME'), 
-				getenv('SNOW_PASSWORD')
-			],
-		]);
-		$response = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
+		if($this->SNOW_LOCS)
+		{
+			return $this->SNOW_LOCS;
+		} else {
+			//Build a Guzzle GET request, get all SNOW locs, active and innactive.
+			$apiRequest = $this->SnowClient->request('GET', getenv('SNOW_API_URI'), [
+				'query' => [
+					//'u_active' => "true", 
+					'sysparm_fields' => "sys_id,u_active,name,street,u_street_2,city,state,zip,country,latitude,longitude"
+				],
+				'auth' => [
+					getenv('SNOW_USERNAME'), 
+					getenv('SNOW_PASSWORD')
+				],
+			]);
+			$response = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
 
-		foreach($response['result'] as $loc){							//loop through all locations returned from snow
-			$snowlocs[$loc[name]] = $loc;								//build new array with sitecode as the key
+			foreach($response['result'] as $loc){							//loop through all locations returned from snow
+				$snowlocs[$loc[name]] = $loc;								//build new array with sitecode as the key
+			}
+			ksort($snowlocs);												//sort by key
+
+			$this->SNOW_LOCS = $snowlocs;									//return new array
+			return $this->SNOW_LOCS;
 		}
-		ksort($snowlocs);												//sort by key
-
-		return $snowlocs;												//return new array
 	}
 
 	/*
@@ -171,44 +177,63 @@ class ObserviumSync
 
 	public function Netman_get_cisco_devices()
 	{
-		//Build a Guzzle GET request
-		$apiRequest = $this->NetmanClient->request('GET', "reports/device-monitoring-netmon.php");
-		//decode the JSON into an array
-		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
-		//print_r($RESPONSE);
-		return $RESPONSE['devices']; //return the devices in the response.
-
+		if($this->NM_DEVICES)
+		{
+			return $this->NM_DEVICES;
+		} else {
+			//Build a Guzzle GET request
+			$apiRequest = $this->NetmanClient->request('GET', "reports/device-monitoring-netmon.php");
+			//decode the JSON into an array
+			$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
+			//print_r($RESPONSE);
+			
+			$this->NM_DEVICES = $RESPONSE['devices']; //return the devices in the response.
+			return $this->NM_DEVICES;
+		}
 	}
 
 	public function obs_get_devices()
 	{
-		//Build a Guzzle GET request
-		$apiRequest = $this->NetmonClient->request('GET', 'api/', [
-			'query' => ['type' => 'device'],
-			'auth' => [
-				getenv('OBS_USERNAME'), 
-				getenv('OBS_PASSWORD')
-			],
-		]);
+		if($this->OBS_DEVICES)
+		{
+			return $this->OBS_DEVICES;
+		} else {
+			//Build a Guzzle GET request
+			$apiRequest = $this->NetmonClient->request('GET', 'api/', [
+				'query' => ['type' => 'device'],
+				'auth' => [
+					getenv('OBS_USERNAME'), 
+					getenv('OBS_PASSWORD')
+				],
+			]);
 
-		$devices = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
+			$devices = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
 
-		return $devices['data'];
+			$this->OBS_DEVICES = $devices['data'];
+			return $this->OBS_DEVICES;
+		}
 	}
 
-	public function obs_get_groups(){
-		//Build a Guzzle GET request
-		$apiRequest = $this->NetmonClient->request('GET', 'api/', [
-			'query' => ['type' => 'group'],
-			'auth' => [
-				getenv('OBS_USERNAME'), 
-				getenv('OBS_PASSWORD')
-			],
-		]);
+	public function obs_get_groups()
+	{
+		if($this->OBS_GROUPS)
+		{
+			return $this->OBS_GROUPS;
+		} else {
+			//Build a Guzzle GET request
+			$apiRequest = $this->NetmonClient->request('GET', 'api/', [
+				'query' => ['type' => 'group'],
+				'auth' => [
+					getenv('OBS_USERNAME'), 
+					getenv('OBS_PASSWORD')
+				],
+			]);
 
-		$groups = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
+			$groups = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
 
-		return $groups['data'];
+			$this->OBS_GROUPS = $groups['data'];
+			return $this->OBS_GROUPS;
+		}
 	}
 
 	public function obs_get_ports($obsdeviceid)
@@ -243,7 +268,7 @@ class ObserviumSync
 		foreach($ports as $port)
 		{
 			//Locate port that matches the provided name.
-			if(strtolower($port['ifDescr']) == strtolower($intname))
+			if(strtolower($port['ifDescr']) == strtolower($intname) || strtolower($port['ifName']) == strtolower($intname))
 			{
 				return $port; //Return said port.
 			}
@@ -253,7 +278,7 @@ class ObserviumSync
 	public function nm_get_device($hostname)
 	{
 		//Loop through all NM_DEVICES
-		foreach($this->NM_DEVICES as $devicename => $device)
+		foreach($this->Netman_get_cisco_devices() as $devicename => $device)
 		{
 			//Locate device with name that matches provided name
 			if (strtoupper($hostname) == strtoupper($devicename))
@@ -268,7 +293,7 @@ class ObserviumSync
 	public function obs_get_device($hostname)
 	{
 		//Cycle through all OBS_DEVICES
-		foreach($this->OBS_DEVICES as $device)
+		foreach($this->obs_get_devices() as $device)
 		{
 			//Find a device that matches provided name
 			if (strtoupper($hostname) == strtoupper($device['hostname']))
@@ -282,7 +307,7 @@ class ObserviumSync
 	public function get_snow_location($locname)
 	{
 		//Loop through all SNOW_LOCS
-		foreach($this->SNOW_LOCS as $sitename => $site)
+		foreach($this->Snow_get_valid_locations() as $sitename => $site)
 		{
 			//Fine a loc that matches provided locname
 			if (strtoupper($locname) == strtoupper($sitename))
@@ -298,7 +323,7 @@ class ObserviumSync
 		//build array of netman devices
 		$newnmarray = array();
 		//Loop through NM_DEVICES
-		foreach($this->NM_DEVICES as $devicename => $nmdevice)
+		foreach($this->Netman_get_cisco_devices() as $devicename => $nmdevice)
 		{
 			//If the device has MON=1 configured in SNMP LOC and the name of device isn't empty
 			if($nmdevice['snmploc']['mon'] === 1 && !empty($nmdevice['name']))
@@ -311,7 +336,7 @@ class ObserviumSync
 		//build array of observium devices
 		$newobsarray = array();
 		//loop through all OBS_DEVICES
-		foreach($this->OBS_DEVICES as $obsid => $obsdevice)
+		foreach($this->obs_get_devices() as $obsid => $obsdevice)
 		{
 			$newobsarray[] = $obsdevice['hostname']; //Build an array of obs device names
 		}
@@ -327,7 +352,7 @@ class ObserviumSync
 	public function obs_devices_to_remove()
 	{
 		//loop through OBS_DEVICES
-		foreach($this->OBS_DEVICES as $obsid => $obsdevice)
+		foreach($this->obs_get_devices() as $obsid => $obsdevice)
 		{
 			//print "OBS DEVICE: " . $obsdevice['hostname'] . "\n";
 			$exists = 0;
@@ -492,7 +517,7 @@ class ObserviumSync
 	public function obs_site_groups_to_add()
 	{	
 		//loop through each SNOW location
-		foreach($this->SNOW_LOCS as $sitename => $site){
+		foreach($this->Snow_get_valid_locations() as $sitename => $site){
 			//If the site is ACTIVE in SNOW, add it to our list.
 			if($site['u_active'] == "true")
 			{
@@ -503,10 +528,10 @@ class ObserviumSync
 		
 		$regex = "/SITE_/";
 		//Check if any OBS GROUPS exist
-		if(!empty($this->OBS_GROUPS))
+		if(!empty($this->obs_get_groups()))
 		{
 			//Loop through OBS Groups
-			foreach($this->OBS_GROUPS as $groupid => $group){
+			foreach($this->obs_get_groups() as $groupid => $group){
 				//locate any GROUPS that prefix with SITE_ and add them to our list
 				if(preg_match($regex, $group['group_name'], $hits)){
 					$obsgroupnames[] = substr($group['group_name'], 5);
@@ -524,7 +549,7 @@ class ObserviumSync
 	public function obs_site_groups_to_remove()
 	{
 		//Loop through all SNOW LOCS
-		foreach($this->SNOW_LOCS as $sitename => $site){
+		foreach($this->Snow_get_valid_locations() as $sitename => $site){
 			//Find any ACTIVE sites and add them to our list.  PREPEND SITE_ in front of them.
 			if($site['u_active'] == true)
 			{
@@ -535,10 +560,10 @@ class ObserviumSync
 
 		$regex = "/SITE_/";
 		//Make sure list from OBS is not empty.
-		if(!empty($this->OBS_GROUPS))
+		if(!empty($this->obs_get_groups()))
 		{
 			//Loop through OBS GROUPS and find any that begin with SITE_, add them to our list
-			foreach($this->OBS_GROUPS as $groupid => $group){
+			foreach($this->obs_get_groups() as $groupid => $group){
 				if(preg_match($regex, $group['group_name'], $hits)){
 					$obsgroupnames[] = $group['group_name'];
 				}
@@ -636,14 +661,14 @@ class ObserviumSync
 
 	public function obs_remove_all_site_groups()
 	{
-		foreach($this->OBS_GROUPS as $group){
+		foreach($this->obs_get_groups() as $group){
 			$this->obs_remove_site_group($group['group_name']);
 		}
 	}
 
 	public function obs_remove_all_devices()
 	{
-		foreach($this->OBS_DEVICES as $id => $device){
+		foreach($this->obs_get_devices() as $id => $device){
 			print $device['hostname'] . "\n";
 			$result = $this->obs_remove_device(array("id"=>$id));
 			print $result['success'] . "\n";
@@ -652,21 +677,11 @@ class ObserviumSync
 
 	public function obs_remove_dup_devices()
 	{
-		$devices = $this->OBS_DEVICES;
-		//return array_diff_key( $devices , array_unique( $devices ) );
-		//return array_count_values($devices);
-		//return count($devices) !== count(array_unique($devices));
-
-        foreach($this->OBS_DEVICES as $obsid => $obsdevice){
+        foreach($this->obs_get_devices() as $obsid => $obsdevice){
             $newobsarray[] = chop($obsdevice['hostname'],".net.kiewitplaza.com");
         }
         sort($newobsarray);
-		/*
-		print "Obs Devices : \n";
-        print_r($newobsarray);
-		print "Obs Duplicates : \n:";
-		print_r(array_values(array_diff_key($newobsarray , array_unique($newobsarray))));
-		/**/
+
 		$dups = array_values(array_diff_key($newobsarray , array_unique($newobsarray)));
 
 		foreach($dups as $dup){
@@ -778,7 +793,7 @@ class ObserviumSync
 	public function obs_set_locations()
 	{
 		print "***LOCATION SETTINGS***\n";
-		foreach($this->OBS_DEVICES as $deviceid => $device)
+		foreach($this->obs_get_devices() as $deviceid => $device)
 		{
 			if($nmdevice = $this->nm_get_device($device['hostname']))
 			{
@@ -828,7 +843,7 @@ class ObserviumSync
 	
 	public function obs_unset_coords()
 	{
-		foreach($this->OBS_DEVICES as $deviceid => $device){
+		foreach($this->obs_get_devices() as $deviceid => $device){
 
 			$postparams = [
 				"action"	=>	"dbquery",
@@ -930,7 +945,7 @@ class ObserviumSync
 
 	public function obs_devices_to_ignore()
 	{
-		foreach($this->OBS_DEVICES as $obsdevice)
+		foreach($this->obs_get_devices() as $obsdevice)
 		{
 			if($obsdevice['ignore'] == 0)
 			{
@@ -955,7 +970,7 @@ class ObserviumSync
 
 	public function obs_devices_to_unignore()
 	{
-		foreach($this->OBS_DEVICES as $obsdevice)
+		foreach($this->obs_get_devices() as $obsdevice)
 		{
 			if($obsdevice['ignore'] == 1)
 			{
@@ -1054,7 +1069,7 @@ class ObserviumSync
 	
 	public function obs_ports_to_ignore()
 	{
-		foreach($this->NM_DEVICES as $nmdevice)
+		foreach($this->Netman_get_cisco_devices() as $nmdevice)
 		{
 			if($nmdevice['interfaces'])
 			{
@@ -1101,7 +1116,7 @@ class ObserviumSync
 
 	public function obs_ports_to_unignore()
 	{
-		foreach($this->NM_DEVICES as $nmdevice)
+		foreach($this->Netman_get_cisco_devices() as $nmdevice)
 		{
 			if($nmdevice['interfaces'])
 			{
@@ -1161,6 +1176,8 @@ class ObserviumSync
 					print "FAILED!\n";
 				}
 			}
+		} else {
+			print "--NO PORTS TO IGNORE!\n";
 		}
 	}
 	
@@ -1179,6 +1196,8 @@ class ObserviumSync
 					print "FAILED!\n";
 				}
 			}
+		} else {
+            print "--NO PORTS TO UNIGNORE!\n";
 		}
 	}
 	
@@ -1212,8 +1231,9 @@ class ObserviumSync
 				]);
 
 				$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
-
-				if ($RESPONSE['success'] == 1 && $this->obs_alert_disable($portid) == 1)
+				$this->obs_alert_disable($portid);
+//				if ($RESPONSE['success'] == 1 && $this->obs_alert_disable($portid) == 1)
+				if ($RESPONSE['success'] == 1)
 				{
 					return 1;
 				} else {
@@ -1223,14 +1243,7 @@ class ObserviumSync
 			print "Invalid parameter provided!";
 			return 0;
 			}
-
-
-/**/
-
-//          $update_array['alert_status'] = '0';
-//          $update_array['last_message'] = 'Checks failed';
-
-				return $RESPONSE;
+				//return $RESPONSE;
 		} else {
 			print "No PORT ID found!";
 			return 0;
@@ -1239,7 +1252,7 @@ class ObserviumSync
 	
 	public function obs_ports_to_disable()
 	{
-		foreach($this->NM_DEVICES as $nmdevice)
+		foreach($this->Netman_get_cisco_devices() as $nmdevice)
 		{
 			if($nmdevice['interfaces'])
 			{
@@ -1287,7 +1300,7 @@ class ObserviumSync
 	
 	public function obs_ports_to_enable()
 	{
-		foreach($this->NM_DEVICES as $nmdevice)
+		foreach($this->Netman_get_cisco_devices() as $nmdevice)
 		{
 			if($nmdevice['interfaces'])
 			{
@@ -1336,23 +1349,41 @@ class ObserviumSync
 
 	public function obs_disable_ports()
 	{
+        print "***** DISABLING PORTS ******\n";
 		if($disableports = $this->obs_ports_to_disable())
 		{		
 			foreach($disableports as $disableport)
 			{
-				$this->obs_port_toggle_disabled($disableport['obs_port_id'], 1);
+                print "DISABLING PORT ID " . $disableport['obs_port_id'] . ", DEVICE NAME: " . $disableport['device_name'] . ", PORT NAME: " . $disableport['port_name'] . ".............";
+                if($this->obs_port_toggle_disabled($disableport['obs_port_id'], 1))
+                {
+                    print "SUCCESS!\n";
+                } else {
+                    print "FAILED!\n";
+                }
 			}
+		} else {
+            print "--NO PORTS TO DISABLE!\n";
 		}
 	}
 	
 	public function obs_enable_ports()
 	{
+        print "***** ENABLING PORTS ******\n"; 
 		if($enableports = $this->obs_ports_to_enable())
 		{		
 			foreach($enableports as $enableport)
 			{
-				$this->obs_port_toggle_disabled($enableport['obs_port_id'], 0);
+                print "ENABLING PORT ID " . $enableport['obs_port_id'] . ", DEVICE NAME: " . $enableport['device_name'] . ", PORT NAME: " . $enableport['port_name'] . ".............";
+                if($this->obs_port_toggle_disabled($enableport['obs_port_id'], 0))
+                {
+                    print "SUCCESS!\n";
+                } else {
+                    print "FAILED!\n";
+                }
 			}
+		} else {
+            print "--NO PORTS TO ENABLE!\n";
 		}
 	}
 	
@@ -1433,6 +1464,7 @@ class ObserviumSync
 		]);
 
 		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
+
 		return $RESPONSE['success'];
 	}
 	
