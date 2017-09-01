@@ -951,7 +951,7 @@ class ObserviumSync
 			{
 				if($nmdevice = $this->nm_get_device($obsdevice['hostname']))
 				{
-					if($nmdevice['snmploc']['alert'] === 0)
+					if($nmdevice['snmploc']['ALERT'] === 0 || $nmdevice['snmploc']['alert'] === 0)
 					{
 						$ignoredevices[] = $obsdevice['hostname'];
 					}
@@ -976,7 +976,7 @@ class ObserviumSync
 			{
 				if($nmdevice = $this->nm_get_device($obsdevice['hostname']))
 				{
-					if($nmdevice['snmploc']['alert'] === 1)
+					if($nmdevice['snmploc']['ALERT'] === 1 || $nmdevice['snmploc']['alert'] === 1)
 					{
 						$unignoredevices[] = $obsdevice['hostname'];
 					}
@@ -1083,7 +1083,7 @@ class ObserviumSync
 						foreach($nmdevice['interfaces'] as $iname => $iconfig)
 						{
 							//print_r($iconfig);
-							if($iconfig['description']['ALERT'] === 0)
+							if($iconfig['description']['ALERT'] === 0 || $iconfig['description']['alert'] === 0)
 							{
 								//print $nmdevice['name'] . " interface " . $iname . " is set to ALERT=1! \n";
 								if($obsport = $this->obs_get_port($obsports,$iname))
@@ -1130,7 +1130,7 @@ class ObserviumSync
 						foreach($nmdevice['interfaces'] as $iname => $iconfig)
 						{
 							//print_r($iconfig);
-							if($iconfig['description']['ALERT'] === 1)
+							if($iconfig['description']['ALERT'] === 1 || $iconfig['description']['alert'] === 1)
 							{
 								//print $nmdevice['name'] . " interface " . $iname . " is set to ALERT=1! \n";
 								if($obsport = $this->obs_get_port($obsports,$iname))
@@ -1267,7 +1267,7 @@ class ObserviumSync
 						foreach($nmdevice['interfaces'] as $iname => $iconfig)
 						{
 							//print_r($iconfig);
-							if($iconfig['description']['MON'] === 0)
+							if($iconfig['description']['MON'] === 0 || $iconfig['description']['mon'] === 0)
 							{
 								//print $nmdevice['name'] . " interface " . $iname . " is set to MON=0! \n";
 								if($obsport = $this->obs_get_port($obsports,$iname))
@@ -1315,7 +1315,7 @@ class ObserviumSync
 						foreach($nmdevice['interfaces'] as $iname => $iconfig)
 						{
 							//print_r($iconfig);
-							if($iconfig['description']['MON'] === 1)
+							if($iconfig['description']['MON'] === 1 || $iconfig['description']['mon'] === 1)
 							{
 								//print $nmdevice['name'] . " interface " . $iname . " is set to MON=1! \n";
 								if($obsport = $this->obs_get_port($obsports,$iname))
