@@ -402,7 +402,7 @@ class ObserviumSync
 				],
 		]);
 		$DEVICE = json_decode($apiRequest->getBody()->getContents(), true);  //execute the request
-
+		$this->obs_device_toggle_ignore($hostname, 1);
 		/*
 		if($DEVICE['success'] == true){
 			//If device is an ACCESS SWITCH, disable PORTS module.
