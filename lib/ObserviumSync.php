@@ -326,9 +326,9 @@ class ObserviumSync
 		foreach($this->Netman_get_cisco_devices() as $devicename => $nmdevice)
 		{
 			//If the device has MON=1 configured in SNMP LOC and the name of device isn't empty
-			if($nmdevice['snmploc']['mon'] === 1 || $nmdevice['snmploc']['MON'] === 1))
+			if($nmdevice['snmploc']['mon'] === 1 || $nmdevice['snmploc']['MON'] === 1)
 			{
-				if(!empty($nmdevice['name'])
+				if(!empty($nmdevice['name']))
 				{
 					$newnmarray[] = $nmdevice['name']; //Add to our array
 				}
