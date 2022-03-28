@@ -1,5 +1,5 @@
 {
-    "name": "ohtarr/ObserviumSync",
+    "name": "ohtarr/observiumsync",
     "type": "library",
     "description": "PHP Observium Synchronization Tool",
     "keywords": [

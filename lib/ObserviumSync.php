@@ -36,47 +36,45 @@ class ObserviumSync
 {
 
 	//public $NM_DEVICES = json_decode();
+	public $observium_base_uri;
+	public $obs_username;
+	public $obs_password;
+	public $netman_base_uri;
+	public $snow_base_uri;
+	public $snow_api_uri;
+	public $snow_username;
+	public $snow_password;
+	
 	public $NM_DEVICES;			//array of Netman cisco devices
 	public $OBS_DEVICES;		//array of Observium devices
 	public $OBS_GROUPS;			//array of Observium Groups
 	public $SNOW_LOCS;			//array of locations from SNOW
-	public $logmsg = "";
 	public $NetmonClient;		//Netmon GUZZLE REQUEST
 	public $NetmanClient;		//Netman GUZZLE REQUEST
 	public $SnowClient;			//SNOW GUZZLE REQUEST
 
-    public function __construct()
+    public function __construct($observium_base_uri,$obs_username,$obs_password,$netman_base_uri,$snow_base_uri,$snow_api_uri,$snow_username,$snow_password)
 	{
-		$dotenv = new Dotenv(__DIR__."/../");
-		$dotenv->load();
-		global $DB;
+		$this->observium_base_uri = $observium_base_uri;
+		$this->obs_username = $obs_username;
+		$this->obs_password = $obs_password;
+		$this->netman_base_uri = $netman_base_uri;
+		$this->snow_base_uri = $snow_base_uri;
+		$this->snow_api_uri = $snow_api_uri;
+		$this->snow_username = $snow_username;
+		$this->snow_password = $snow_password;
+
 		$this->NetmonClient = new GuzzleHttpClient([
-			'base_uri' => getenv('OBSERVIUM_BASE_URI'),
+			'base_uri' => $this->observium_base_uri,
 		]);
 
 		$this->NetmanClient = new GuzzleHttpClient([
-			'base_uri' => getenv('NETMAN_BASE_URI'),
-			//'cert' => getenv('NETMAN_CERT'),
+			'base_uri' => $this->netman_base_uri,
 		]);
 
 		$this->SnowClient = new GuzzleHttpClient([
-			'base_uri' => getenv('SNOW_BASE_URI'),
+			'base_uri' => $this->snow_base_uri,
 		]);
-		
-		//$this->NM_DEVICES = $this->Netman_get_cisco_devices();		//populate array of switches from Network Management Platform
-		//$this->SNOW_LOCS = $this->Snow_get_valid_locations();	//populate a list of locations from SNOW
-		//$this->OBS_DEVICES = $this->obs_get_devices();	//populate a list of Observium devices
-		//$this->OBS_GROUPS = $this->obs_get_groups();
-/*
-		if (empty($this->NM_DEVICES)		||
-			empty($this->SNOW_LOCS)			||
-			empty($this->OBS_DEVICES)
-			)
-		{
-			$DB->log("ObserviumSync failed: 1 or more data sources are empty!");
-			die();
-		}
-/**/
 	}
 
 	public function __destruct()
@@ -84,19 +82,6 @@ class ObserviumSync
 
 	}
 
-	/*
-    [WCDBCVAN] => Array
-        (
-            [zip] => V5C 0G5
-            [u_street_2] =>
-            [street] => 123 Fast Creek Drive
-            [name] => XXXXXXXX
-            [state] => BC
-            [sys_id] => 11ccf5b16ffb020034cb07321c3ee4b1
-            [country] => CA
-            [city] => Burnaby
-        )
-	/**/
 	public function Snow_get_valid_locations()
 	{
 		if($this->SNOW_LOCS)
@@ -104,20 +89,20 @@ class ObserviumSync
 			return $this->SNOW_LOCS;
 		} else {
 			//Build a Guzzle GET request, get all SNOW locs, active and innactive.
-			$apiRequest = $this->SnowClient->request('GET', getenv('SNOW_API_URI'), [
+			$apiRequest = $this->SnowClient->request('GET', $this->snow_api_uri, [
 				'query' => [
 					//'u_active' => "true", 
 					'sysparm_fields' => "sys_id,u_active,name,street,u_street_2,city,state,zip,country,latitude,longitude"
 				],
 				'auth' => [
-					getenv('SNOW_USERNAME'), 
-					getenv('SNOW_PASSWORD')
+					$this->snow_username, 
+					$this->snow_password
 				],
 			]);
 			$response = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
 
 			foreach($response['result'] as $loc){							//loop through all locations returned from snow
-				$snowlocs[$loc[name]] = $loc;								//build new array with sitecode as the key
+				$snowlocs[$loc['name']] = $loc;								//build new array with sitecode as the key
 			}
 			ksort($snowlocs);												//sort by key
 
@@ -126,51 +111,6 @@ class ObserviumSync
 		}
 	}
 
-	/*
-	public function Netman_get_cisco_devices()
-	{
-
-		$postparams = [
-				"category"  =>  "Management",
-				"type"      =>  "Device_Network_Cisco"
-		];
-
-		$apiRequest = $this->NetmanClient->request('POST', getenv('NETMAN_SEARCH_API_URI'), [
-				'json' => $postparams,
-		]);
-		$DEVICEIDS = json_decode($apiRequest->getBody()->getContents(), true);
-		$DEVICEIDS = $DEVICEIDS['results'];
-		
-		foreach($DEVICEIDS as $deviceid){
-
-			$apiRequest = $this->NetmanClient->request('GET', getenv('NETMAN_RETRIEVE_API_URI'), [
-				'query' => ['id' => $deviceid],
-			]);
-			$device = json_decode($apiRequest->getBody()->getContents(), true);
-
-			$newarray[$device['object']['data']['id']]['name'] = 	$device['object']['data']['name'];
-			$newarray[$device['object']['data']['id']]['id'] = 		$device['object']['data']['id'];
-			$newarray[$device['object']['data']['id']]['ip'] = 		$device['object']['data']['ip'];
-			$newarray[$device['object']['data']['id']]['model'] = 	$device['object']['data']['model'];
-			
-			foreach (preg_split('/\r\n|\r|\n/', $device['object']['data']['run']) as $LINE) {
-				if (preg_match("/snmp-server location (.+)/", $LINE, $MATCH)) {
-					$SNMPLOCATION = $MATCH[1];
-					break;
-				}
-			}
-			$SNMPARRAY = json_decode($SNMPLOCATION,true);			
-			if (is_array($SNMPARRAY)) {
-				$newarray[$device['object']['data']['id']]['snmp'] = $SNMPARRAY;
-			}
-		
-		}
-		ksort($newarray);
-		return $newarray;
-
-	}
-	/**/
-
 	public function Netman_get_cisco_devices()
 	{
 		if($this->NM_DEVICES)
@@ -178,7 +118,7 @@ class ObserviumSync
 			return $this->NM_DEVICES;
 		} else {
 			//Build a Guzzle GET request
-			$apiRequest = $this->NetmanClient->request('GET', "reports/device-monitoring-netmon.php");
+			$apiRequest = $this->NetmanClient->request('GET', "reports/device-monitoring-netmon.php", ['verify' => false]);
 			//decode the JSON into an array
 			$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true); //EXECUTE GUZZLE REQUEST
 			//print_r($RESPONSE);
@@ -196,10 +136,11 @@ class ObserviumSync
 		} else {
 			//Build a Guzzle GET request
 			$apiRequest = $this->NetmonClient->request('GET', 'api/', [
-				'query' => ['type' => 'device'],
-				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
+				'verify'	=> false,
+				'query'		=> ['type' => 'device'],
+				'auth'		=> [
+					$this->obs_username, 
+					$this->obs_password
 				],
 			]);
 
@@ -218,10 +159,11 @@ class ObserviumSync
 		} else {
 			//Build a Guzzle GET request
 			$apiRequest = $this->NetmonClient->request('GET', 'api/', [
+				'verify'	=> false,
 				'query' => ['type' => 'group'],
 				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
+					$this->obs_username, 
+					$this->obs_password
 				],
 			]);
 
@@ -243,11 +185,12 @@ class ObserviumSync
 		];
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-				'json' => $postparams,
-				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
-				],
+			'verify'	=> false,
+			'json' => $postparams,
+			'auth' => [
+				$this->obs_username, 
+				$this->obs_password
+			],
 		]);
 
 		if($ports = json_decode($apiRequest->getBody()->getContents(), true)) //EXECUTE GUZZLE REQUEST
@@ -394,53 +337,15 @@ class ObserviumSync
 
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-				'json' => $postparams,
-				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
-				],
+			'verify'	=> false,
+			'json' => $postparams,
+			'auth' => [
+				$this->obs_username, 
+				$this->obs_password
+			],
 		]);
 		$DEVICE = json_decode($apiRequest->getBody()->getContents(), true);  //execute the request
 		$this->obs_device_toggle_ignore($hostname, 1);
-		/*
-		if($DEVICE['success'] == true){
-			//If device is an ACCESS SWITCH, disable PORTS module.
-			$reg = "/^\D{5}\S{3}.*(sw[api]|SW[API])[0-9]{2,4}.*$/";                   //regex to match ACCESS switches only
-			if (preg_match($reg,$hostname, $hits)){
-				$postparams2 = [	"type"		=>	"device",
-									"id"		=>	$DEVICE['data']['device_id'],
-									"option"	=>	"discover_ports",
-									"value"		=>	"0",
-									//"debug"		=>	1,
-				];
-				//Build a Guzzle POST request
-				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-					'json' => $postparams2,
-					'auth' => [
-						getenv('OBS_USERNAME'), 
-						getenv('OBS_PASSWORD')
-					],						
-				]);
-				$response2 = json_decode($apiRequest->getBody()->getContents(), true);
-
-				$postparams3 = [	"type"		=>	"device",
-									"id"		=>	$DEVICE['data']['device_id'],
-									"option"	=>	"poll_ports",
-									"value"		=>	"0",
-									//"debug"		=>	1,
-				];
-				//Build a Guzzle POST request
-				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-					'json' => $postparams3,
-					'auth' => [
-						getenv('OBS_USERNAME'), 
-						getenv('OBS_PASSWORD')
-					],
-				]);
-				$response3 = json_decode($apiRequest->getBody()->getContents(), true);
-			}
-		}
-		/**/
 		return $DEVICE;
 	}
 
@@ -480,10 +385,11 @@ class ObserviumSync
 		}
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+			'verify'	=> false,
 			'json' => $postparams,
 			'auth' => [
-				getenv('OBS_USERNAME'), 
-				getenv('OBS_PASSWORD')
+				$this->obs_username, 
+				$this->obs_password
 			],
 		]);
 		//execute the request
@@ -587,11 +493,12 @@ class ObserviumSync
 						];
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-				'json' => $postparams,
-				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
-				],
+			'verify'	=> false,
+			'json' => $postparams,
+			'auth' => [
+				$this->obs_username, 
+				$this->obs_password
+			],
 		]);
 
 		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
@@ -624,11 +531,12 @@ class ObserviumSync
 						];
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-				'json' => $postparams,
-				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
-				],
+			'verify'	=> false,
+			'json' => $postparams,
+			'auth' => [
+				$this->obs_username, 
+				$this->obs_password
+			],
 		]);
 
 		$RESPONSE = json_decode($apiRequest->getBody()->getContents(), true);
@@ -700,11 +608,12 @@ class ObserviumSync
 		];
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-				'json' => $postparams,
-				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
-				],
+			'verify'	=> false,
+			'json' => $postparams,
+			'auth' => [
+				$this->obs_username, 
+				$this->obs_password
+			],
 		]);
 		$DEVICE = json_decode($apiRequest->getBody()->getContents(), true);					
 		//print_r($DEVICE);
@@ -718,11 +627,12 @@ class ObserviumSync
 		];
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-				'json' => $postparams2,
-				'auth' => [
-					getenv('OBS_USERNAME'), 
-					getenv('OBS_PASSWORD')
-				],
+			'verify'	=> false,
+			'json' => $postparams2,
+			'auth' => [
+				$this->obs_username, 
+				$this->obs_password
+			],
 		]);
 		$DEVICE2 = json_decode($apiRequest->getBody()->getContents(), true);					
 		//print_r($DEVICE2);
@@ -748,11 +658,12 @@ class ObserviumSync
 			];
 			//Build a Guzzle POST request
 			$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-					'json' => $postparams,
-					'auth' => [
-						getenv('OBS_USERNAME'), 
-						getenv('OBS_PASSWORD')
-					],
+				'verify'	=> false,
+				'json' => $postparams,
+				'auth' => [
+					$this->obs_username, 
+					$this->obs_password
+				],
 			]);
 			$DEVICE = json_decode($apiRequest->getBody()->getContents(), true);					
 			if ($DEVICE['success'])
@@ -772,11 +683,12 @@ class ObserviumSync
 				];
 				//Build a Guzzle POST request
 				$apiRequest2 = $this->NetmonClient->request('POST', 'api/', [
-						'json' => $postparams2,
-						'auth' => [
-							getenv('OBS_USERNAME'), 
-							getenv('OBS_PASSWORD')
-						],
+					'verify'	=> false,
+					'json' => $postparams2,
+					'auth' => [
+						$this->obs_username, 
+						$this->obs_password
+					],
 				]);
 				$DEVICE2 = json_decode($apiRequest2->getBody()->getContents(), true);	
 			}
@@ -852,11 +764,12 @@ class ObserviumSync
 			];
 			//Build a Guzzle POST request
 			$apiRequest = $this->NetmonClient->request('POST', 'api/', [
-					'json' => $postparams,
-					'auth' => [
-						getenv('OBS_USERNAME'), 
-						getenv('OBS_PASSWORD')
-					],
+				'verify'	=> false,
+				'json' => $postparams,
+				'auth' => [
+					$this->obs_username, 
+					$this->obs_password
+				],
 			]);
 			$DEVICE = json_decode($apiRequest->getBody()->getContents(), true);					
 			
@@ -875,36 +788,17 @@ class ObserviumSync
 			];
 			//Build a Guzzle POST request
 			$apiRequest2 = $this->NetmonClient->request('POST', 'api/', [
-					'json' => $postparams2,
-					'auth' => [
-						getenv('OBS_USERNAME'), 
-						getenv('OBS_PASSWORD')
-					],
+				'verify'	=> false,
+				'json' => $postparams2,
+				'auth' => [
+					$this->obs_username, 
+					$this->obs_password
+				],
 			]);
 			$DEVICE2 = json_decode($apiRequest2->getBody()->getContents(), true);					
 		}
 	}
 
-    public function obs_add_50_devices()
-    {
-        $this->logmsg .= "***ADD_DEVICES*** ";
-        $counter = 0;
-        $adddevices = $this->obs_devices_to_add();
-        //print_r($adddevices);
-
-        foreach ($adddevices as $adddevice){
-			if($counter < 50)
-			{
-	            $this->logmsg .= $adddevice . ", ";
-	            print_r($this->obs_add_device($adddevice));
-				$counter++;
-			} else {
-				break;
-			}
-        }
-
-    }
-	
 	public function obs_device_toggle_ignore($hostname, $ignore)
 	{
 		if($hostname)
@@ -922,10 +816,11 @@ class ObserviumSync
 				];
 				//Build a Guzzle POST request
 				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+					'verify'	=> false,
 					'json' => $postparams,
 					'auth' => [
-						getenv('OBS_USERNAME'), 
-						getenv('OBS_PASSWORD')
+						$this->obs_username, 
+						$this->obs_password
 					],
 				]);
 
@@ -1047,10 +942,11 @@ class ObserviumSync
 				];
 				//Build a Guzzle POST request
 				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+					'verify'	=> false,
 					'json' => $postparams,
 					'auth' => [
-						getenv('OBS_USERNAME'), 
-						getenv('OBS_PASSWORD')
+						$this->obs_username, 
+						$this->obs_password
 					],
 				]);
 
@@ -1222,10 +1118,11 @@ class ObserviumSync
 				}
 				//Build a Guzzle POST request
 				$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+					'verify'	=> false,
 					'json' => $postparams,
 					'auth' => [
-						getenv('OBS_USERNAME'), 
-						getenv('OBS_PASSWORD')
+						$this->obs_username, 
+						$this->obs_password
 					],
 				]);
 
@@ -1396,10 +1293,11 @@ class ObserviumSync
 		];
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+			'verify'	=> false,
 			'json' => $postparams,
 			'auth' => [
-				getenv('OBS_USERNAME'), 
-				getenv('OBS_PASSWORD')
+				$this->obs_username, 
+				$this->obs_password
 			],
 		]);
 
@@ -1414,10 +1312,11 @@ class ObserviumSync
 		];
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+			'verify'	=> false,
 			'json' => $postparams,
 			'auth' => [
-				getenv('OBS_USERNAME'), 
-				getenv('OBS_PASSWORD')
+				$this->obs_username, 
+				$this->obs_password
 			],
 		]);
 
@@ -1455,10 +1354,11 @@ class ObserviumSync
 		];
 		//Build a Guzzle POST request
 		$apiRequest = $this->NetmonClient->request('POST', 'api/', [
+			'verify'	=> false,
 			'json' => $postparams,
 			'auth' => [
-				getenv('OBS_USERNAME'), 
-				getenv('OBS_PASSWORD')
+				$this->obs_username, 
+				$this->obs_password
 			],
 		]);
 
