@@ -269,7 +269,7 @@ class ObserviumSync
 			{
 				if(!empty($nmdevice['name']))
 				{
-					$newnmarray[] = $nmdevice['name']; //Add to our array
+					$newnmarray[] = strtolower($nmdevice['name']); //Add to our array
 				}
 			}
 		}
@@ -280,7 +280,7 @@ class ObserviumSync
 		//loop through all OBS_DEVICES
 		foreach($this->obs_get_devices() as $obsid => $obsdevice)
 		{
-			$newobsarray[] = $obsdevice['hostname']; //Build an array of obs device names
+			$newobsarray[] = strtolower($obsdevice['hostname']); //Build an array of obs device names
 		}
 		sort($newobsarray);  //sort the array
 		//print_r($newobsarray);
