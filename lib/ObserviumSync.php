@@ -708,8 +708,8 @@ class ObserviumSync
 		{
 			if($nmdevice = $this->nm_get_device($device['hostname']))
 			{
-				print "*** DEVICE ID: {$deviceid}, DEVICE NAME: {$device['hostname']} ***\n";				
-				if($locname = $nmdevice['snmploc']['site'])
+				print "*** DEVICE ID: {$deviceid}, DEVICE NAME: {$device['hostname']} ***\n";
+				if($locname = substr($DEVICE->data['name'], 0, 8))
 				{
 					if($site = $this->get_snow_location($locname))
 					{
