@@ -694,6 +694,7 @@ class ObserviumSync
 				$DEVICE2 = json_decode($apiRequest2->getBody()->getContents(), true);	
 			}
 		}
+		print_r($DEVICE2);
 		if($DEVICE2['success'])
 		{
 			return true;
@@ -710,7 +711,7 @@ class ObserviumSync
 			if($nmdevice = $this->nm_get_device($device['hostname']))
 			{
 				print "*** DEVICE ID: {$deviceid}, DEVICE NAME: {$device['hostname']} ***\n";
-				if($locname = substr($DEVICE->data['name'], 0, 8))
+				if($locname = substr($device['hostname'], 0, 8))
 				{
 					if($site = $this->get_snow_location($locname))
 					{
@@ -724,7 +725,7 @@ class ObserviumSync
 						}
 						if (strlen($site['latitude']) > 0 && strlen($site['longitude']) > 0 && $site['latitude'] >= -90 && $site['latitude'] <= 90 && $site['longitude'] >= -180 && $site['longitude'] <= 180)
 						{
-							print "	SET COORDS " . $site[latitude] . "," . $site[longitude] . " .........";
+							print "	SET COORDS " . $site['latitude'] . "," . $site['longitude'] . " .........";
 							if($this->obs_set_location_coords($deviceid,$site['latitude'],$site['longitude']))
 							{
 								print "SUCCESS!\n";
