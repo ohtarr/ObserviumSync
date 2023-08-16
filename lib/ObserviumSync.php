@@ -91,7 +91,8 @@ class ObserviumSync
 			//Build a Guzzle GET request, get all SNOW locs, active and innactive.
 			$apiRequest = $this->SnowClient->request('GET', $this->snow_api_uri, [
 				'query' => [
-					//'u_active' => "true", 
+					//'u_active' => "true",
+					'sysparm_query' => "companyISNOTEMPTY",
 					'sysparm_fields' => "sys_id,u_active,name,street,u_street_2,city,state,zip,country,latitude,longitude"
 				],
 				'auth' => [
